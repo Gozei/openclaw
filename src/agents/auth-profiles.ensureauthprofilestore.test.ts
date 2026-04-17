@@ -5,13 +5,18 @@ import { describe, expect, it, vi } from "vitest";
 import {
   clearRuntimeAuthProfileStoreSnapshots,
   ensureAuthProfileStore,
+  loadAuthProfileStoreForSecretsRuntime,
   loadAuthProfileStoreForRuntime,
 } from "./auth-profiles.js";
 import { AUTH_STORE_VERSION, log } from "./auth-profiles/constants.js";
 import type { AuthProfileCredential } from "./auth-profiles/types.js";
 
+const { resolveExternalAuthProfilesWithPluginsMock } = vi.hoisted(() => ({
+  resolveExternalAuthProfilesWithPluginsMock: vi.fn(() => []),
+}));
+
 vi.mock("../plugins/provider-runtime.js", () => ({
-  resolveExternalAuthProfilesWithPlugins: () => [],
+  resolveExternalAuthProfilesWithPlugins: resolveExternalAuthProfilesWithPluginsMock,
 }));
 
 vi.mock("./cli-credentials.js", () => ({
@@ -95,6 +100,16 @@ describe("ensureAuthProfileStore", () => {
     }
     return profile;
   }
+
+  it("keeps secrets-runtime auth store loads free of provider runtime overlays", () => {
+    clearRuntimeAuthProfileStoreSnapshots();
+    resolveExternalAuthProfilesWithPluginsMock.mockClear();
+
+    const store = loadAuthProfileStoreForSecretsRuntime();
+
+    expect(store.version).toBe(AUTH_STORE_VERSION);
+    expect(resolveExternalAuthProfilesWithPluginsMock).not.toHaveBeenCalled();
+  });
 
   it("migrates legacy auth.json and deletes it (PR #368)", () => {
     const agentDir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-auth-profiles-"));

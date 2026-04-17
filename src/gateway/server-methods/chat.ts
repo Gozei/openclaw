@@ -1613,7 +1613,7 @@ export const chatHandlers: GatewayRequestHandlers = {
     };
     const { cfg, storePath, entry } = loadSessionEntry(sessionKey);
     const sessionId = entry?.sessionId;
-    const sessionAgentId = resolveSessionAgentId({ sessionKey, config: cfg });
+    const sessionAgentId = resolveSessionAgentId({ sessionKey, config: cfg, sessionEntry: entry });
     const resolvedSessionModel = resolveSessionModelRef(cfg, entry, sessionAgentId);
     const localMessages =
       sessionId && storePath ? readSessionMessages(sessionId, storePath, entry?.sessionFile) : [];
@@ -1839,6 +1839,7 @@ export const chatHandlers: GatewayRequestHandlers = {
     const agentId = resolveSessionAgentId({
       sessionKey,
       config: cfg,
+      sessionEntry: entry,
     });
     let parsedMessage = inboundMessage;
     let parsedImages: ChatImageContent[] = [];
@@ -2146,6 +2147,7 @@ export const chatHandlers: GatewayRequestHandlers = {
         dispatcher,
         replyOptions: {
           runId: clientRunId,
+          sessionEntry: entry,
           abortSignal: abortController.signal,
           images: parsedImages.length > 0 ? parsedImages : undefined,
           imageOrder: imageOrder.length > 0 ? imageOrder : undefined,
@@ -2351,7 +2353,7 @@ export const chatHandlers: GatewayRequestHandlers = {
       sessionId,
       storePath,
       sessionFile: entry?.sessionFile,
-      agentId: resolveSessionAgentId({ sessionKey, config: cfg }),
+      agentId: resolveSessionAgentId({ sessionKey, config: cfg, sessionEntry: entry }),
       createIfMissing: true,
     });
     if (!appended.ok || !appended.messageId || !appended.message) {

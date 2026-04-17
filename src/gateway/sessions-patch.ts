@@ -1,5 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { resolveDefaultAgentId } from "../agents/agent-scope.js";
+import {
+  resolveAgentConfig,
+  resolveDefaultAgentId,
+  resolveSessionAgentId,
+} from "../agents/agent-scope.js";
 import type { ModelCatalogEntry } from "../agents/model-catalog.js";
 import {
   resolveAllowedModelRef,
@@ -96,11 +100,7 @@ export async function applySessionsPatchToStore(params: {
   const { cfg, store, storeKey, patch } = params;
   const now = Date.now();
   const parsedAgent = parseAgentSessionKey(storeKey);
-  const sessionAgentId = normalizeAgentId(parsedAgent?.agentId ?? resolveDefaultAgentId(cfg));
-  const resolvedDefault = resolveDefaultModelForAgent({ cfg, agentId: sessionAgentId });
-  const subagentModelHint = isSubagentSessionKey(storeKey)
-    ? resolveSubagentConfiguredModelSelection({ cfg, agentId: sessionAgentId })
-    : undefined;
+  const storeAgentId = normalizeAgentId(parsedAgent?.agentId ?? resolveDefaultAgentId(cfg));
 
   const existing = store[storeKey];
   const next: SessionEntry = existing
@@ -109,6 +109,37 @@ export async function applySessionsPatchToStore(params: {
         updatedAt: Math.max(existing.updatedAt ?? 0, now),
       }
     : { sessionId: randomUUID(), updatedAt: now };
+
+  if ("agentId" in patch) {
+    const raw = patch.agentId;
+    if (raw === null) {
+      delete next.agentOverrideId;
+    } else if (raw !== undefined) {
+      const trimmed = normalizeOptionalString(raw) ?? "";
+      if (!trimmed) {
+        return invalid("invalid agentId: empty");
+      }
+      const normalized = normalizeAgentId(trimmed);
+      if (!resolveAgentConfig(cfg, normalized)) {
+        return invalid(`unknown agentId: ${normalized}`);
+      }
+      if (normalized === storeAgentId) {
+        delete next.agentOverrideId;
+      } else {
+        next.agentOverrideId = normalized;
+      }
+    }
+  }
+
+  const sessionAgentId = resolveSessionAgentId({
+    sessionKey: storeKey,
+    config: cfg,
+    sessionEntry: next,
+  });
+  const resolvedDefault = resolveDefaultModelForAgent({ cfg, agentId: sessionAgentId });
+  const subagentModelHint = isSubagentSessionKey(storeKey)
+    ? resolveSubagentConfiguredModelSelection({ cfg, agentId: sessionAgentId })
+    : undefined;
 
   if ("spawnedBy" in patch) {
     const raw = patch.spawnedBy;

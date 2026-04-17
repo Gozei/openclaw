@@ -130,6 +130,7 @@ export type GatewayHelloOk = {
 type Pending = {
   resolve: (value: unknown) => void;
   reject: (err: unknown) => void;
+  timeout: number | null;
 };
 
 type SelectedConnectAuth = {
@@ -211,6 +212,8 @@ export type GatewayBrowserClientOptions = {
   url: string;
   token?: string;
   password?: string;
+  requestTimeoutMs?: number;
+  tickWatchMinIntervalMs?: number;
   clientName?: GatewayClientName;
   clientVersion?: string;
   platform?: string;
@@ -290,15 +293,24 @@ export class GatewayBrowserClient {
   private pending = new Map<string, Pending>();
   private closed = false;
   private lastSeq: number | null = null;
+  private lastTick: number | null = null;
   private connectNonce: string | null = null;
   private connectSent = false;
   private connectTimer: number | null = null;
+  private tickTimer: number | null = null;
+  private tickIntervalMs = 30_000;
   private backoffMs = 800;
   private pendingConnectError: GatewayErrorInfo | undefined;
   private pendingDeviceTokenRetry = false;
   private deviceTokenRetryBudgetUsed = false;
+  private readonly requestTimeoutMs: number;
 
-  constructor(private opts: GatewayBrowserClientOptions) {}
+  constructor(private opts: GatewayBrowserClientOptions) {
+    this.requestTimeoutMs =
+      typeof opts.requestTimeoutMs === "number" && Number.isFinite(opts.requestTimeoutMs)
+        ? Math.max(1, Math.min(Math.floor(opts.requestTimeoutMs), 2_147_483_647))
+        : 30_000;
+  }
 
   start() {
     this.closed = false;
@@ -308,11 +320,13 @@ export class GatewayBrowserClient {
   stop() {
     this.closed = true;
     this.clearConnectTimer();
+    this.clearTickWatch();
     this.ws?.close();
     this.ws = null;
     this.pendingConnectError = undefined;
     this.pendingDeviceTokenRetry = false;
     this.deviceTokenRetryBudgetUsed = false;
+    this.lastTick = null;
     this.flushPending(new Error("gateway client stopped"));
   }
 
@@ -332,6 +346,8 @@ export class GatewayBrowserClient {
       const connectError = this.pendingConnectError;
       this.pendingConnectError = undefined;
       this.ws = null;
+      this.clearTickWatch();
+      this.lastTick = null;
       this.flushPending(new Error(`gateway closed (${ev.code}): ${reason}`));
       this.opts.onClose?.({ code: ev.code, reason, error: connectError });
       const connectErrorCode = resolveGatewayErrorDetailCode(connectError);
@@ -355,6 +371,7 @@ export class GatewayBrowserClient {
     if (this.closed) {
       return;
     }
+    this.clearTickWatch();
     const delay = this.backoffMs;
     this.backoffMs = Math.min(this.backoffMs * 1.7, 15_000);
     this.clearConnectTimer();
@@ -366,6 +383,9 @@ export class GatewayBrowserClient {
 
   private flushPending(err: Error) {
     for (const [, p] of this.pending) {
+      if (p.timeout !== null) {
+        window.clearTimeout(p.timeout);
+      }
       p.reject(err);
     }
     this.pending.clear();
@@ -456,6 +476,10 @@ export class GatewayBrowserClient {
       });
     }
     this.backoffMs = 800;
+    this.tickIntervalMs =
+      typeof hello?.policy?.tickIntervalMs === "number" ? hello.policy.tickIntervalMs : 30_000;
+    this.lastTick = Date.now();
+    this.startTickWatch();
     this.opts.onHello?.(hello);
   }
 
@@ -529,6 +553,7 @@ export class GatewayBrowserClient {
 
     const frame = parsed as { type?: unknown };
     if (frame.type === "event") {
+      this.lastTick = Date.now();
       const evt = parsed as GatewayEventFrame;
       if (evt.event === "connect.challenge") {
         const payload = evt.payload as { nonce?: unknown } | undefined;
@@ -555,12 +580,16 @@ export class GatewayBrowserClient {
     }
 
     if (frame.type === "res") {
+      this.lastTick = Date.now();
       const res = parsed as GatewayResponseFrame;
       const pending = this.pending.get(res.id);
       if (!pending) {
         return;
       }
       this.pending.delete(res.id);
+      if (pending.timeout !== null) {
+        window.clearTimeout(pending.timeout);
+      }
       if (res.ok) {
         pending.resolve(res.payload);
       } else {
@@ -611,14 +640,31 @@ export class GatewayBrowserClient {
     };
   }
 
-  request<T = unknown>(method: string, params?: unknown): Promise<T> {
+  request<T = unknown>(
+    method: string,
+    params?: unknown,
+    opts?: { timeoutMs?: number | null },
+  ): Promise<T> {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       return Promise.reject(new Error("gateway not connected"));
     }
     const id = generateUUID();
     const frame = { type: "req", id, method, params };
+    const timeoutMs =
+      opts?.timeoutMs === null
+        ? null
+        : typeof opts?.timeoutMs === "number" && Number.isFinite(opts.timeoutMs)
+          ? Math.max(1, Math.min(Math.floor(opts.timeoutMs), 2_147_483_647))
+          : this.requestTimeoutMs;
     const p = new Promise<T>((resolve, reject) => {
-      this.pending.set(id, { resolve: (v) => resolve(v as T), reject });
+      const timeout =
+        timeoutMs === null
+          ? null
+          : window.setTimeout(() => {
+              this.pending.delete(id);
+              reject(new Error(`gateway request timeout for ${method}`));
+            }, timeoutMs);
+      this.pending.set(id, { resolve: (v) => resolve(v as T), reject, timeout });
     });
     this.ws.send(JSON.stringify(frame));
     return p;
@@ -639,5 +685,34 @@ export class GatewayBrowserClient {
       window.clearTimeout(this.connectTimer);
       this.connectTimer = null;
     }
+  }
+
+  private clearTickWatch() {
+    if (this.tickTimer !== null) {
+      window.clearInterval(this.tickTimer);
+      this.tickTimer = null;
+    }
+  }
+
+  private startTickWatch() {
+    this.clearTickWatch();
+    const rawMinInterval = this.opts.tickWatchMinIntervalMs;
+    const minInterval =
+      typeof rawMinInterval === "number" && Number.isFinite(rawMinInterval)
+        ? Math.max(1, Math.min(30_000, rawMinInterval))
+        : 1_000;
+    const interval = Math.max(this.tickIntervalMs, minInterval);
+    this.tickTimer = window.setInterval(() => {
+      if (this.closed) {
+        return;
+      }
+      if (!this.lastTick) {
+        return;
+      }
+      const gap = Date.now() - this.lastTick;
+      if (gap > this.tickIntervalMs * 2) {
+        this.ws?.close(4000, "tick timeout");
+      }
+    }, interval);
   }
 }

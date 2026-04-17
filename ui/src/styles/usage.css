@@ -66,7 +66,7 @@
   position: sticky;
   top: 16px;
   z-index: 4;
-  box-shadow: var(--shadow-md);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
 }
 
 .usage-header {
@@ -104,7 +104,8 @@
   gap: 6px;
   padding: 5px 10px;
   border-radius: var(--radius-full);
-  background: color-mix(in srgb, var(--accent) 10%, var(--bg-muted));
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-elevated));
   color: var(--accent);
   font-size: 11px;
   font-weight: 600;
@@ -155,7 +156,7 @@
 
 .usage-skeleton-block {
   min-height: 96px;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
   border: 1px solid var(--border);
   background: linear-gradient(90deg, var(--bg-muted) 20%, var(--bg-hover) 50%, var(--bg-muted) 80%);
   background-size: 200% 100%;
@@ -185,19 +186,19 @@
 }
 
 .chart-toggle {
-  padding: 3px;
-  background: var(--bg-muted);
+  padding: 4px;
+  background: color-mix(in srgb, var(--bg-elevated) 92%, var(--bg));
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-full);
   gap: 2px;
 }
 
 .chart-toggle .toggle-btn {
   border: none;
-  border-radius: calc(var(--radius-md) - 3px);
+  border-radius: var(--radius-full);
   background: transparent;
-  min-height: 28px;
-  padding: 4px 12px;
+  min-height: 30px;
+  padding: 4px 14px;
   font-size: 12px;
 }
 
@@ -207,9 +208,9 @@
 }
 
 .chart-toggle .toggle-btn.active {
-  background: var(--accent-subtle);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
   border: none;
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--accent) 12%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
 .usage-date-range {
@@ -225,10 +226,10 @@
 .usage-query-input,
 .usage-filters-inline select,
 .usage-filters-inline input[type="text"] {
-  min-height: 32px;
+  min-height: 36px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--bg-elevated);
+  border-radius: calc(var(--radius-md) + 6px);
+  background: color-mix(in srgb, var(--bg) 88%, var(--bg-elevated));
   color: var(--text);
   font: inherit;
   font-size: 12px;
@@ -240,12 +241,12 @@
 
 .usage-date-input,
 .usage-select {
-  padding: 6px 10px;
+  padding: 7px 12px;
 }
 
 .usage-date-input:hover,
 .usage-select:hover {
-  border-color: var(--border-strong);
+  border-color: color-mix(in srgb, var(--accent) 16%, var(--border));
 }
 
 .usage-date-input:focus,
@@ -256,6 +257,7 @@
   outline: none;
   border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 12%, transparent);
+  background: color-mix(in srgb, var(--bg-elevated) 90%, var(--accent-subtle));
 }
 
 .usage-separator,
@@ -290,7 +292,7 @@
   padding: 5px 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius-full);
-  background: var(--bg-elevated);
+  background: color-mix(in srgb, var(--bg-elevated) 96%, transparent);
   font-size: 11px;
   font-weight: 500;
   color: var(--muted);
@@ -299,7 +301,7 @@
 }
 
 .usage-metric-badge:hover {
-  border-color: var(--border-strong);
+  border-color: color-mix(in srgb, var(--accent) 16%, var(--border));
 }
 
 .usage-metric-badge strong {
@@ -392,11 +394,11 @@ details.usage-filter-select summary::-webkit-details-marker,
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 30px;
-  padding: 5px 10px;
+  min-height: 34px;
+  padding: 6px 12px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--bg-elevated);
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--bg-elevated) 96%, transparent);
   color: var(--text);
   cursor: pointer;
   font-size: 12px;
@@ -408,8 +410,8 @@ details.usage-filter-select summary::-webkit-details-marker,
 }
 
 .usage-filter-select summary:hover {
-  border-color: var(--border-strong);
-  background: var(--bg-hover);
+  border-color: color-mix(in srgb, var(--accent) 16%, var(--border));
+  background: color-mix(in srgb, var(--bg-elevated) 88%, var(--accent-subtle));
 }
 
 .usage-filter-select[open] summary {
@@ -437,12 +439,12 @@ details.usage-filter-select summary::-webkit-details-marker,
   position: absolute;
   top: calc(100% + 8px);
   width: min(320px, calc(100vw - 48px));
-  padding: 12px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-lg);
-  background: var(--popover);
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: color-mix(in srgb, var(--bg-elevated) 98%, transparent);
   color: var(--popover-foreground);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-md);
   z-index: 12;
 }
 
@@ -466,24 +468,24 @@ details.usage-filter-select summary::-webkit-details-marker,
   grid-template-columns: auto minmax(0, 1fr);
   gap: 8px;
   align-items: center;
-  padding: 6px 8px;
-  border-radius: var(--radius-md);
+  padding: 8px 10px;
+  border-radius: calc(var(--radius-md) + 4px);
   background: transparent;
   font-size: 12px;
   transition: background 0.12s ease;
 }
 
 .usage-filter-option:hover {
-  background: var(--bg-hover);
+  background: color-mix(in srgb, var(--bg-elevated) 88%, var(--accent-subtle));
 }
 
 .usage-export-item {
   width: 100%;
-  min-height: 32px;
-  padding: 7px 10px;
+  min-height: 36px;
+  padding: 8px 12px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--bg-elevated);
+  border-radius: calc(var(--radius-md) + 6px);
+  background: color-mix(in srgb, var(--bg-elevated) 96%, transparent);
   color: var(--text);
   text-align: left;
   font: inherit;
@@ -496,8 +498,8 @@ details.usage-filter-select summary::-webkit-details-marker,
 }
 
 .usage-export-item:hover:not(:disabled) {
-  border-color: var(--border-strong);
-  background: var(--bg-hover);
+  border-color: color-mix(in srgb, var(--accent) 16%, var(--border));
+  background: color-mix(in srgb, var(--bg-elevated) 88%, var(--accent-subtle));
   color: var(--text-strong);
 }
 
@@ -1187,11 +1189,11 @@ details.usage-filter-select summary::-webkit-details-marker,
 }
 
 .sessions-sort select {
-  min-height: 34px;
-  padding: 7px 10px;
+  min-height: 36px;
+  padding: 7px 12px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--bg);
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--bg-elevated) 96%, transparent);
   color: var(--text);
 }
 
@@ -1219,26 +1221,32 @@ details.usage-filter-select summary::-webkit-details-marker,
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px;
+  padding: 13px 14px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: color-mix(in srgb, var(--card) 86%, var(--bg-muted));
+  border-radius: var(--radius-xl);
+  background: color-mix(in srgb, var(--bg-elevated) 96%, transparent);
+  box-shadow: var(--shadow-sm);
   cursor: pointer;
   transition:
     transform 0.18s var(--ease-out),
     border-color 0.18s var(--ease-out),
-    box-shadow 0.18s var(--ease-out);
+    box-shadow 0.18s var(--ease-out),
+    background 0.18s var(--ease-out);
 }
 
 .session-bar-row:hover {
   transform: translateY(-1px);
-  border-color: color-mix(in srgb, var(--accent) 22%, var(--border));
-  box-shadow: 0 8px 18px color-mix(in srgb, black 12%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 18%, var(--border));
+  background: color-mix(in srgb, var(--bg-elevated) 88%, var(--accent-subtle));
+  box-shadow: var(--shadow-md);
 }
 
 .session-bar-row.selected {
   border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 14%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-elevated));
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 12%, transparent),
+    var(--shadow-sm);
 }
 
 .session-bar-label,

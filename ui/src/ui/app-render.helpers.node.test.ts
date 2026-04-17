@@ -426,7 +426,7 @@ describe("switchChatSession", () => {
     });
   });
 
-  it("does not force agentId=main for plain session keys", async () => {
+  it("resolves the effective agent for plain session keys", async () => {
     const settings: AppViewState["settings"] = {
       gatewayUrl: "",
       token: "",
@@ -476,13 +476,14 @@ describe("switchChatSession", () => {
     refreshSlashCommandsMock.mockResolvedValue(undefined);
     loadChatHistoryMock.mockResolvedValue(undefined);
     loadSessionsMock.mockResolvedValue(undefined);
+    refreshSlashCommandsMock.mockClear();
 
     switchChatSession(state, "main");
     await Promise.resolve();
 
-    expect(refreshSlashCommandsMock).toHaveBeenCalledWith({
+    expect(refreshSlashCommandsMock).toHaveBeenLastCalledWith({
       client: state.client,
-      agentId: undefined,
+      agentId: "main",
     });
   });
 });

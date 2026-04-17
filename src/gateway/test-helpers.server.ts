@@ -35,6 +35,7 @@ import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../utils/message-cha
 import { buildDeviceAuthPayloadV3 } from "./device-auth.js";
 import { PROTOCOL_VERSION } from "./protocol/index.js";
 import type { GatewayServerOptions } from "./server.js";
+import { clearSessionEventRevisionsForTest } from "./session-event-revision.js";
 import { resetTestPluginRegistry } from "./test-helpers.plugin-registry.js";
 import {
   agentCommand,
@@ -349,6 +350,7 @@ async function resetGatewayTestState(options: { uniqueConfigRoot: boolean }) {
     drainSystemEvents(sessionKey);
   }
   resetAgentRunContextForTest();
+  clearSessionEventRevisionsForTest();
   const mod = await getServerModule();
   await mod.__resetModelCatalogCacheForTest();
   piSdkMock.enabled = false;
@@ -441,6 +443,7 @@ async function resetGatewayTestRuntimeOnly() {
     drainSystemEvents(sessionKey);
   }
   resetAgentRunContextForTest();
+  clearSessionEventRevisionsForTest();
 }
 
 export function installGatewayTestHooks(options?: { scope?: "test" | "suite" }) {

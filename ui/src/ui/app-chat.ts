@@ -510,6 +510,14 @@ function shouldApplyChatAvatarResult(host: ChatHost, version: number, sessionKey
 }
 
 function resolveAgentIdForSession(host: ChatHost): string | null {
+  const activeSession = host.sessionsResult?.sessions?.find((row) => row.key === host.sessionKey);
+  const effectiveAgentId =
+    typeof activeSession?.agentId === "string" && activeSession.agentId.trim()
+      ? activeSession.agentId.trim()
+      : null;
+  if (effectiveAgentId) {
+    return effectiveAgentId;
+  }
   const parsed = parseAgentSessionKey(host.sessionKey);
   if (parsed?.agentId) {
     return parsed.agentId;

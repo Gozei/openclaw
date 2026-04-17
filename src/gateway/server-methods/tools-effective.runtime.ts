@@ -3,4 +3,8 @@ export { resolveEffectiveToolInventory } from "../../agents/tools-effective-inve
 export { resolveReplyToMode } from "../../auto-reply/reply/reply-threading.js";
 export { loadConfig } from "../../config/config.js";
 export { deliveryContextFromSession } from "../../utils/delivery-context.shared.js";
-export { loadSessionEntry, resolveSessionModelRef } from "../session-utils.js";
+export {
+  loadSessionEntry,
+  resolveLoadedSessionAgentId,
+  resolveSessionModelRef,
+} from "../session-utils.js";

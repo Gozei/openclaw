@@ -13,8 +13,8 @@ import {
   loadConfig,
   loadSessionEntry,
   resolveEffectiveToolInventory,
+  resolveLoadedSessionAgentId,
   resolveReplyToMode,
-  resolveSessionAgentId,
   resolveSessionModelRef,
 } from "./tools-effective.runtime.js";
 import type { GatewayRequestHandlers, RespondFn } from "./types.js";
@@ -56,9 +56,10 @@ function resolveTrustedToolsEffectiveContext(params: {
     return null;
   }
 
-  const sessionAgentId = resolveSessionAgentId({
+  const sessionAgentId = resolveLoadedSessionAgentId({
     sessionKey: loaded.canonicalKey ?? params.sessionKey,
-    config: loaded.cfg,
+    cfg: loaded.cfg,
+    entry: loaded.entry,
   });
   if (params.requestedAgentId && params.requestedAgentId !== sessionAgentId) {
     params.respond(

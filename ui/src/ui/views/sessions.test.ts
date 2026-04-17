@@ -29,6 +29,7 @@ function buildProps(result: SessionsListResult): SessionsProps {
   return {
     loading: false,
     result,
+    agentsList: null,
     error: null,
     activeMinutes: "",
     limit: "120",
@@ -83,7 +84,7 @@ describe("sessions view", () => {
     await Promise.resolve();
 
     const selects = container.querySelectorAll("select");
-    const verbose = selects[2] as HTMLSelectElement | undefined;
+    const verbose = selects[3] as HTMLSelectElement | undefined;
     expect(verbose?.value).toBe("full");
     expect(Array.from(verbose?.options ?? []).some((option) => option.value === "full")).toBe(true);
   });
@@ -106,7 +107,7 @@ describe("sessions view", () => {
     await Promise.resolve();
 
     const selects = container.querySelectorAll("select");
-    const reasoning = selects[3] as HTMLSelectElement | undefined;
+    const reasoning = selects[4] as HTMLSelectElement | undefined;
     expect(reasoning?.value).toBe("custom-mode");
     expect(
       Array.from(reasoning?.options ?? []).some((option) => option.value === "custom-mode"),
@@ -131,7 +132,7 @@ describe("sessions view", () => {
     await Promise.resolve();
 
     const selects = container.querySelectorAll("select");
-    const fast = selects[1] as HTMLSelectElement | undefined;
+    const fast = selects[2] as HTMLSelectElement | undefined;
     expect(fast?.value).toBe("on");
   });
 
@@ -172,5 +173,42 @@ describe("sessions view", () => {
     expect(onDeselectPage).toHaveBeenCalledWith(["page-0"]);
     expect(onDeselectAll).not.toHaveBeenCalled();
     expect(onSelectPage).not.toHaveBeenCalled();
+  });
+
+  it("renders the session agent override selector and reports explicit overrides", async () => {
+    const onPatch = vi.fn();
+    const container = document.createElement("div");
+    render(
+      renderSessions({
+        ...buildProps(
+          buildResult({
+            key: "agent:main:main",
+            kind: "direct",
+            updatedAt: Date.now(),
+            agentId: "ops",
+            agentOverrideId: "ops",
+          }),
+        ),
+        agentsList: {
+          defaultId: "main",
+          agents: [
+            { id: "main", name: "Main" },
+            { id: "ops", name: "Ops" },
+          ],
+        },
+        onPatch,
+      }),
+      container,
+    );
+    await Promise.resolve();
+
+    const selects = container.querySelectorAll("select");
+    const agentSelect = selects[0] as HTMLSelectElement | undefined;
+    expect(agentSelect?.value).toBe("ops");
+
+    agentSelect!.value = "";
+    agentSelect!.dispatchEvent(new Event("change", { bubbles: true }));
+
+    expect(onPatch).toHaveBeenCalledWith("agent:main:main", { agentId: null });
   });
 });

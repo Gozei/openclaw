@@ -1,22 +1,57 @@
-<svg viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="lobster-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#ff4d4d"/>
-      <stop offset="100%" stop-color="#991b1b"/>
+    <linearGradient id="deepclaw-bg" x1="18" y1="14" x2="110" y2="116" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0B1830" />
+      <stop offset="1" stop-color="#132B52" />
     </linearGradient>
+    <linearGradient id="deepclaw-mark" x1="34" y1="26" x2="98" y2="98" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#41C8FF" />
+      <stop offset="0.55" stop-color="#4F95FF" />
+      <stop offset="1" stop-color="#59E0CD" />
+    </linearGradient>
+    <radialGradient id="deepclaw-glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(88 36) rotate(132.614) scale(78.9471)">
+      <stop stop-color="#4FC8FF" stop-opacity="0.42" />
+      <stop offset="1" stop-color="#4FC8FF" stop-opacity="0" />
+    </radialGradient>
   </defs>
-  <!-- Body -->
-  <path d="M60 10 C30 10 15 35 15 55 C15 75 30 95 45 100 L45 110 L55 110 L55 100 C55 100 60 102 65 100 L65 110 L75 110 L75 100 C90 95 105 75 105 55 C105 35 90 10 60 10Z" fill="url(#lobster-gradient)"/>
-  <!-- Left Claw -->
-  <path d="M20 45 C5 40 0 50 5 60 C10 70 20 65 25 55 C28 48 25 45 20 45Z" fill="url(#lobster-gradient)"/>
-  <!-- Right Claw -->
-  <path d="M100 45 C115 40 120 50 115 60 C110 70 100 65 95 55 C92 48 95 45 100 45Z" fill="url(#lobster-gradient)"/>
-  <!-- Antenna -->
-  <path d="M45 15 Q35 5 30 8" stroke="#ff4d4d" stroke-width="3" stroke-linecap="round"/>
-  <path d="M75 15 Q85 5 90 8" stroke="#ff4d4d" stroke-width="3" stroke-linecap="round"/>
-  <!-- Eyes -->
-  <circle cx="45" cy="35" r="6" fill="#050810"/>
-  <circle cx="75" cy="35" r="6" fill="#050810"/>
-  <circle cx="46" cy="34" r="2.5" fill="#00e5cc"/>
-  <circle cx="76" cy="34" r="2.5" fill="#00e5cc"/>
+  <rect x="10" y="10" width="108" height="108" rx="30" fill="url(#deepclaw-bg)" />
+  <rect x="10" y="10" width="108" height="108" rx="30" fill="url(#deepclaw-glow)" />
+  <g opacity="0.16" fill="#9EDBFF">
+    <circle cx="36" cy="32" r="2.5" />
+    <circle cx="30" cy="48" r="2.5" />
+    <circle cx="38" cy="64" r="2.5" />
+    <circle cx="32" cy="82" r="2.5" />
+    <circle cx="91" cy="82" r="2.5" />
+    <circle cx="98" cy="64" r="2.5" />
+  </g>
+  <path
+    d="M48 32V96"
+    stroke="url(#deepclaw-mark)"
+    stroke-width="12"
+    stroke-linecap="round"
+  />
+  <circle cx="48" cy="44" r="4.5" fill="#DFF8FF" />
+  <circle cx="48" cy="64" r="4.5" fill="#DFF8FF" />
+  <circle cx="48" cy="84" r="4.5" fill="#DFF8FF" />
+  <path
+    d="M50 32C73 32 89 45 89 64C89 83 73 96 50 96"
+    stroke="url(#deepclaw-mark)"
+    stroke-width="12"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <path
+    d="M82 48L98 38"
+    stroke="url(#deepclaw-mark)"
+    stroke-width="11"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <path
+    d="M82 80L98 90"
+    stroke="url(#deepclaw-mark)"
+    stroke-width="11"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
 </svg>

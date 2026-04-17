@@ -3,6 +3,7 @@ import { ref } from "lit/directives/ref.js";
 import { repeat } from "lit/directives/repeat.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import type { CompactionStatus, FallbackStatus } from "../app-tool-stream.ts";
+import { BRAND_COMPANY, BRAND_NAME, BRAND_READY_LABEL, BRAND_RUNTIME_LABEL } from "../brand.ts";
 import {
   CHAT_ATTACHMENT_ACCEPT,
   isSupportedChatAttachmentMimeType,
@@ -884,11 +885,15 @@ function renderWelcomeState(props: ChatProps): TemplateResult {
             style="width:56px; height:56px; border-radius:50%; object-fit:cover;"
           />`
         : html`<div class="agent-chat__avatar agent-chat__avatar--logo">
-            <img src=${logoUrl} alt="OpenClaw" />
+            <img src=${logoUrl} alt=${BRAND_NAME} />
           </div>`}
       <h2>${name}</h2>
+      <p class="agent-chat__brandline">${BRAND_NAME} by ${BRAND_COMPANY}</p>
       <div class="agent-chat__badges">
-        <span class="agent-chat__badge"><img src=${logoUrl} alt="" /> Ready to chat</span>
+        <span class="agent-chat__badge agent-chat__badge--brand"
+          ><img src=${logoUrl} alt="" /> ${BRAND_READY_LABEL}</span
+        >
+        <span class="agent-chat__badge">${BRAND_RUNTIME_LABEL}</span>
       </div>
       <p class="agent-chat__hint">Type a message below &middot; <kbd>/</kbd> for commands</p>
       <div class="agent-chat__suggestions">

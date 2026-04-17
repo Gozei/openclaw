@@ -187,6 +187,88 @@ describe("session.message websocket events", () => {
     });
   });
 
+  test("increments sessionRevision across lifecycle and transcript events", async () => {
+    const storePath = await createSessionStoreFile();
+    const transcriptPath = path.join(path.dirname(storePath), "sess-main.jsonl");
+    await writeSessionStore({
+      entries: {
+        main: {
+          sessionId: "sess-main",
+          sessionFile: transcriptPath,
+          updatedAt: Date.now(),
+        },
+      },
+      storePath,
+    });
+    await fs.writeFile(
+      transcriptPath,
+      [
+        JSON.stringify({ type: "session", version: 1, id: "sess-main" }),
+        JSON.stringify({
+          id: "msg-revision",
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: "revision snapshot" }],
+            timestamp: Date.now(),
+          },
+        }),
+      ].join("\n"),
+      "utf-8",
+    );
+
+    await withOperatorSessionSubscriber(harness, async (ws) => {
+      const lifecycleEventPromise = onceMessage(
+        ws,
+        (message) =>
+          message.type === "event" &&
+          message.event === "sessions.changed" &&
+          (message.payload as { reason?: string; sessionKey?: string } | undefined)?.reason ===
+            "reactivated" &&
+          (message.payload as { sessionKey?: string } | undefined)?.sessionKey ===
+            "agent:main:main",
+      );
+
+      emitSessionLifecycleEvent({
+        sessionKey: "agent:main:main",
+        reason: "reactivated",
+      });
+
+      const lifecycleEvent = await lifecycleEventPromise;
+      expect(lifecycleEvent.payload).toMatchObject({
+        sessionKey: "agent:main:main",
+        sessionRevision: 1,
+      });
+
+      const { messageEvent, changedEvent } = await emitTranscriptUpdateAndCollectEvents({
+        ws,
+        sessionKey: "agent:main:main",
+        sessionFile: transcriptPath,
+        message: {
+          role: "assistant",
+          content: [{ type: "text", text: "revision snapshot" }],
+          timestamp: Date.now(),
+        },
+        messageId: "msg-revision",
+      });
+
+      expect(messageEvent.payload).toMatchObject({
+        sessionKey: "agent:main:main",
+        sessionRevision: 2,
+        session: {
+          sessionRevision: 2,
+        },
+      });
+      expect(changedEvent.payload).toMatchObject({
+        sessionKey: "agent:main:main",
+        phase: "message",
+        sessionRevision: 2,
+        session: {
+          sessionRevision: 2,
+        },
+      });
+    });
+  });
+
   test("only sends transcript events to subscribed operator clients", async () => {
     const storePath = await createSessionStoreFile();
     await writeSessionStore({

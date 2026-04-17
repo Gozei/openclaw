@@ -1,6 +1,7 @@
 import { html } from "lit";
 import { t } from "../../i18n/index.ts";
 import type { AppViewState } from "../app-view-state.ts";
+import { BRAND_COMPANY, BRAND_NAME } from "../brand.ts";
 import { icons } from "../icons.ts";
 import { normalizeBasePath } from "../navigation.ts";
 import { agentLogoUrl } from "./agents-utils.ts";
@@ -14,8 +15,9 @@ export function renderLoginGate(state: AppViewState) {
     <div class="login-gate">
       <div class="login-gate__card">
         <div class="login-gate__header">
-          <img class="login-gate__logo" src=${faviconSrc} alt="OpenClaw" />
-          <div class="login-gate__title">OpenClaw</div>
+          <div class="login-gate__eyebrow">${BRAND_COMPANY}</div>
+          <img class="login-gate__logo" src=${faviconSrc} alt=${BRAND_NAME} />
+          <div class="login-gate__title">${BRAND_NAME}</div>
           <div class="login-gate__sub">${t("login.subtitle")}</div>
         </div>
         <div class="login-gate__form">

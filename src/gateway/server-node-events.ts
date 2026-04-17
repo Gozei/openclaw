@@ -27,8 +27,8 @@ import {
   registerApnsRegistration,
   requestHeartbeatNow,
   resolveGatewayModelSupportsImages,
+  resolveLoadedSessionAgentId,
   resolveOutboundTarget,
-  resolveSessionAgentId,
   resolveSessionModelRef,
   sanitizeInboundSystemTags,
   scopedHeartbeatWakeOptions,
@@ -380,7 +380,11 @@ export const handleNodeEvent = async (ctx: NodeEventContext, nodeId: string, evt
         return;
       }
       if (normalizedAttachments.length > 0) {
-        const sessionAgentId = resolveSessionAgentId({ sessionKey, config: cfg });
+        const sessionAgentId = resolveLoadedSessionAgentId({
+          sessionKey: canonicalKey ?? sessionKey,
+          cfg,
+          entry,
+        });
         const modelRef = resolveSessionModelRef(cfg, entry, sessionAgentId);
         const supportsImages = await resolveGatewayModelSupportsImages({
           loadGatewayModelCatalog: ctx.loadGatewayModelCatalog,

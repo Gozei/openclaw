@@ -3509,6 +3509,7 @@ describe("gateway server sessions", () => {
 
     expect(patched.ok).toBe(true);
     expect(patched.payload?.resolved).toEqual({
+      agentId: "main",
       modelProvider: "anthropic",
       model: "claude-opus-4-6",
     });

@@ -12,10 +12,11 @@ import {
 import { refreshSlashCommands } from "./chat/slash-commands.ts";
 import { refreshVisibleToolsEffectiveForCurrentSession } from "./controllers/agents.ts";
 import { ChatState, loadChatHistory } from "./controllers/chat.ts";
-import { loadSessions } from "./controllers/sessions.ts";
+import { loadSessions, patchSession } from "./controllers/sessions.ts";
 import { icons } from "./icons.ts";
 import { iconForTab, pathForTab, titleForTab, type Tab } from "./navigation.ts";
 import { parseAgentSessionKey } from "./session-key.ts";
+import { resolveEffectiveSessionAgentId } from "./session-runtime.ts";
 import { normalizeLowercaseStringOrEmpty, normalizeOptionalString } from "./string-coerce.ts";
 import type { ThemeMode } from "./theme.ts";
 import {
@@ -175,6 +176,13 @@ function renderCronFilterIcon(hiddenCount: number) {
 
 export function renderChatSessionSelect(state: AppViewState) {
   const sessionGroups = resolveSessionOptionGroups(state, state.sessionKey, state.sessionsResult);
+  const activeSession = state.sessionsResult?.sessions?.find((row) => row.key === state.sessionKey);
+  const activeAgentOverrideId = normalizeOptionalString(activeSession?.agentOverrideId) ?? "";
+  const activeAgentId =
+    normalizeOptionalString(activeSession?.agentId) ??
+    parseAgentSessionKey(state.sessionKey)?.agentId ??
+    state.agentsList?.defaultId ??
+    "main";
   const modelSelect = renderChatModelSelect(state);
   const thinkingSelect = renderChatThinkingSelect(state);
   const selectedSessionLabel =
@@ -213,6 +221,50 @@ export function renderChatSessionSelect(state: AppViewState) {
                     </option>`,
                 )}
               </optgroup>`,
+          )}
+        </select>
+      </label>
+      <label class="field chat-controls__session">
+        <select
+          .value=${activeAgentOverrideId}
+          title=${`Agent: ${activeAgentId}`}
+          ?disabled=${!state.connected || state.chatSending || Boolean(state.chatRunId)}
+          data-chat-agent-select="true"
+          @change=${(e: Event) => {
+            const nextAgentId =
+              normalizeOptionalString((e.target as HTMLSelectElement).value) ?? null;
+            void (async () => {
+              await patchSession(state, state.sessionKey, { agentId: nextAgentId });
+              await refreshChatAvatar(state);
+              await refreshSlashCommands({
+                client: state.client,
+                agentId:
+                  state.sessionsResult?.sessions?.find((row) => row.key === state.sessionKey)
+                    ?.agentId ??
+                  nextAgentId ??
+                  state.agentsList?.defaultId ??
+                  "main",
+              });
+              if (state.agentsPanel === "tools") {
+                await refreshVisibleToolsEffectiveForCurrentSession(state);
+              }
+            })();
+          }}
+        >
+          <option value="">
+            ${state.agentsList?.defaultId
+              ? `Default agent (${state.agentsList.defaultId})`
+              : "Default agent"}
+          </option>
+          ${repeat(
+            state.agentsList?.agents ?? [],
+            (agent) => agent.id,
+            (agent) => html`<option
+              value=${agent.id}
+              ?selected=${activeAgentOverrideId === agent.id}
+            >
+              ${agent.name && agent.name !== agent.id ? `${agent.name} (${agent.id})` : agent.id}
+            </option>`,
           )}
         </select>
       </label>
@@ -559,7 +611,11 @@ export function switchChatSession(state: AppViewState, nextSessionKey: string) {
   void refreshChatAvatar(state);
   void refreshSlashCommands({
     client: state.client,
-    agentId: parseAgentSessionKey(nextSessionKey)?.agentId,
+    agentId: resolveEffectiveSessionAgentId({
+      sessionKey: nextSessionKey,
+      sessionsResult: state.sessionsResult ?? null,
+      defaultAgentId: state.agentsList?.defaultId,
+    }),
   });
   syncUrlWithSessionKey(
     state as unknown as Parameters<typeof syncUrlWithSessionKey>[0],

@@ -1,6 +1,5 @@
 import { LitElement } from "lit";
 import { customElement, state } from "lit/decorators.js";
-import { resolveAgentIdFromSessionKey } from "../../../src/routing/session-key.js";
 import { i18n, I18nController, isSupportedLocale } from "../i18n/index.ts";
 import {
   handleChannelConfigReload as handleChannelConfigReloadInternal,
@@ -76,6 +75,7 @@ import type {
 } from "./controllers/skills.ts";
 import type { GatewayBrowserClient, GatewayHelloOk } from "./gateway.ts";
 import type { Tab } from "./navigation.ts";
+import { resolveEffectiveSessionAgentId } from "./session-runtime.ts";
 import type { SidebarContent } from "./sidebar-content.ts";
 import { loadSettings, type UiSettings } from "./storage.ts";
 import { VALID_THEME_NAMES, type ResolvedTheme, type ThemeMode, type ThemeName } from "./theme.ts";
@@ -563,7 +563,11 @@ export class OpenClawApp extends LitElement {
     if (!changed.has("sessionKey") || this.agentsPanel !== "tools") {
       return;
     }
-    const activeSessionAgentId = resolveAgentIdFromSessionKey(this.sessionKey);
+    const activeSessionAgentId = resolveEffectiveSessionAgentId({
+      sessionKey: this.sessionKey,
+      sessionsResult: this.sessionsResult,
+      defaultAgentId: this.agentsList?.defaultId,
+    });
     if (this.agentsSelectedId && this.agentsSelectedId === activeSessionAgentId) {
       void loadToolsEffectiveInternal(this, {
         agentId: this.agentsSelectedId,

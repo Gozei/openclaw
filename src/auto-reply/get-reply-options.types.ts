@@ -1,4 +1,5 @@
 import type { ImageContent } from "@mariozechner/pi-ai";
+import type { SessionEntry } from "../config/sessions/types.js";
 import type { PromptImageOrderEntry } from "../media/prompt-image-order.js";
 import type { ReplyPayload } from "./reply-payload.js";
 import type { TypingController } from "./reply/typing.js";
@@ -30,6 +31,8 @@ export type ReplyThreadingPolicy = {
 };
 
 export type GetReplyOptions = {
+  /** Session-scoped runtime overrides resolved by the caller for this turn. */
+  sessionEntry?: Pick<SessionEntry, "agentOverrideId">;
   /** Override run id for agent events (defaults to random UUID). */
   runId?: string;
   /** Abort signal for the underlying agent run. */

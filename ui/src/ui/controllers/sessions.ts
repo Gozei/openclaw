@@ -209,6 +209,7 @@ export async function patchSession(
   state: SessionsState,
   key: string,
   patch: {
+    agentId?: string | null;
     label?: string | null;
     thinkingLevel?: string | null;
     fastMode?: boolean | null;
@@ -221,6 +222,7 @@ export async function patchSession(
   }
   const params: Record<string, unknown> = { key };
   for (const field of [
+    "agentId",
     "label",
     "thinkingLevel",
     "fastMode",

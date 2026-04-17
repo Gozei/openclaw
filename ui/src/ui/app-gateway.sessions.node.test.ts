@@ -54,7 +54,14 @@ const { addExecApproval } = await vi.importActual<typeof import("./controllers/e
   "./controllers/exec-approval.ts",
 );
 
-function createHost() {
+type TestGatewayHost = Parameters<typeof handleGatewayEvent>[0] & {
+  chatMessages: unknown[];
+  chatSending: boolean;
+  chatStream: string | null;
+  toolStreamOrder: string[];
+};
+
+function createHost(): TestGatewayHost {
   return {
     settings: {
       gatewayUrl: "ws://127.0.0.1:18789",
@@ -100,12 +107,16 @@ function createHost() {
     assistantAgentId: null,
     serverVersion: null,
     sessionKey: "main",
+    chatMessages: [],
+    chatSending: false,
+    chatStream: null,
+    toolStreamOrder: [],
     chatRunId: null,
     refreshSessionsAfterChat: new Set<string>(),
     execApprovalQueue: [],
     execApprovalError: null,
     updateAvailable: null,
-  } as unknown as Parameters<typeof handleGatewayEvent>[0];
+  } as unknown as TestGatewayHost;
 }
 
 describe("handleGatewayEvent sessions.changed", () => {
@@ -123,10 +134,102 @@ describe("handleGatewayEvent sessions.changed", () => {
     expect(loadSessionsMock).toHaveBeenCalledTimes(1);
     expect(loadSessionsMock).toHaveBeenCalledWith(host);
   });
+
+  it("patches an already loaded session row in place when the payload has a matching session key", () => {
+    loadSessionsMock.mockReset();
+    const host = createHost() as TestGatewayHost & {
+      sessionsResult: {
+        defaults: Record<string, unknown>;
+        sessions: Array<Record<string, unknown>>;
+      };
+    };
+    host.sessionsResult = {
+      defaults: {},
+      sessions: [
+        {
+          key: "agent:qa:main",
+          kind: "direct",
+          label: "Old label",
+          updatedAt: 1,
+          agentId: "agent-old",
+          sessionRevision: 1,
+        },
+      ],
+    };
+
+    handleGatewayEvent(host, {
+      type: "event",
+      event: "sessions.changed",
+      payload: {
+        sessionKey: "agent:qa:main",
+        kind: "direct",
+        label: "Fresh label",
+        updatedAt: 2,
+        agentId: "agent-new",
+        sessionRevision: 2,
+      },
+      seq: 1,
+    });
+
+    expect(loadSessionsMock).not.toHaveBeenCalled();
+    expect(host.sessionsResult.sessions[0]).toMatchObject({
+      key: "agent:qa:main",
+      label: "Fresh label",
+      updatedAt: 2,
+      agentId: "agent-new",
+      sessionRevision: 2,
+    });
+  });
+
+  it("reloads active chat history when session revisions skip ahead", () => {
+    loadSessionsMock.mockReset();
+    loadChatHistoryMock.mockReset();
+    const host = createHost() as TestGatewayHost & {
+      sessionsResult: {
+        defaults: Record<string, unknown>;
+        sessions: Array<Record<string, unknown>>;
+      };
+    };
+    host.sessionKey = "agent:qa:main";
+    host.sessionsResult = {
+      defaults: {},
+      sessions: [
+        {
+          key: "agent:qa:main",
+          kind: "direct",
+          label: "Old label",
+          updatedAt: 1,
+          sessionRevision: 1,
+        },
+      ],
+    };
+
+    handleGatewayEvent(host, {
+      type: "event",
+      event: "sessions.changed",
+      payload: {
+        sessionKey: "agent:qa:main",
+        kind: "direct",
+        label: "Fresh label",
+        updatedAt: 2,
+        sessionRevision: 3,
+      },
+      seq: 1,
+    });
+
+    expect(loadSessionsMock).not.toHaveBeenCalled();
+    expect(loadChatHistoryMock).toHaveBeenCalledTimes(1);
+    expect(loadChatHistoryMock).toHaveBeenCalledWith(host);
+    expect(host.sessionsResult.sessions[0]).toMatchObject({
+      key: "agent:qa:main",
+      label: "Fresh label",
+      sessionRevision: 3,
+    });
+  });
 });
 
 describe("handleGatewayEvent session.message", () => {
-  it("reloads chat history for the active session", () => {
+  it("reloads chat history for the active session when only the session key is provided", () => {
     loadChatHistoryMock.mockReset();
     const host = createHost();
     host.sessionKey = "agent:qa:main";
@@ -135,6 +238,197 @@ describe("handleGatewayEvent session.message", () => {
       type: "event",
       event: "session.message",
       payload: { sessionKey: "agent:qa:main" },
+      seq: 1,
+    });
+
+    expect(loadChatHistoryMock).toHaveBeenCalledTimes(1);
+    expect(loadChatHistoryMock).toHaveBeenCalledWith(host);
+  });
+
+  it("does not reload history while the current run is still live", () => {
+    loadChatHistoryMock.mockReset();
+    const host = createHost();
+    host.sessionKey = "agent:qa:main";
+    host.chatRunId = "run-1";
+    host.chatStream = "";
+
+    handleGatewayEvent(host, {
+      type: "event",
+      event: "session.message",
+      payload: {
+        sessionKey: "agent:qa:main",
+        message: {
+          role: "assistant",
+          content: [{ type: "text", text: "Working" }],
+        },
+      },
+      seq: 1,
+    });
+
+    expect(loadChatHistoryMock).not.toHaveBeenCalled();
+  });
+
+  it("does not reload history when the transcript event matches the already-rendered last message", () => {
+    loadChatHistoryMock.mockReset();
+    const host = createHost();
+    host.sessionKey = "agent:qa:main";
+    host.chatMessages = [
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "Final answer" }],
+      },
+    ];
+
+    handleGatewayEvent(host, {
+      type: "event",
+      event: "session.message",
+      payload: {
+        sessionKey: "agent:qa:main",
+        message: {
+          role: "assistant",
+          content: [{ type: "text", text: "Final answer" }],
+        },
+      },
+      seq: 1,
+    });
+
+    expect(loadChatHistoryMock).not.toHaveBeenCalled();
+  });
+
+  it("reloads history when the transcript event differs from the current rendered tail", () => {
+    loadChatHistoryMock.mockReset();
+    const host = createHost();
+    host.sessionKey = "agent:qa:main";
+    host.chatMessages = [
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "Old answer" }],
+      },
+    ];
+
+    handleGatewayEvent(host, {
+      type: "event",
+      event: "session.message",
+      payload: {
+        sessionKey: "agent:qa:main",
+        message: {
+          role: "assistant",
+          content: [{ type: "text", text: "Fresh answer" }],
+        },
+      },
+      seq: 1,
+    });
+
+    expect(loadChatHistoryMock).toHaveBeenCalledTimes(1);
+    expect(loadChatHistoryMock).toHaveBeenCalledWith(host);
+  });
+
+  it("appends consecutive transcript updates directly into the active chat", () => {
+    loadChatHistoryMock.mockReset();
+    const host = createHost();
+    host.sessionKey = "agent:qa:main";
+    host.chatMessages = [
+      {
+        role: "user",
+        content: [{ type: "text", text: "Hi" }],
+        __openclaw: { id: "msg-1", seq: 1 },
+      },
+    ];
+
+    handleGatewayEvent(host, {
+      type: "event",
+      event: "session.message",
+      payload: {
+        sessionKey: "agent:qa:main",
+        messageId: "msg-2",
+        messageSeq: 2,
+        message: {
+          role: "assistant",
+          content: [{ type: "text", text: "Hello there" }],
+        },
+      },
+      seq: 1,
+    });
+
+    expect(loadChatHistoryMock).not.toHaveBeenCalled();
+    expect(host.chatMessages).toHaveLength(2);
+    expect(host.chatMessages[1]).toMatchObject({
+      role: "assistant",
+      __openclaw: { id: "msg-2", seq: 2 },
+    });
+  });
+
+  it("reloads history when transcript updates arrive with a visible sequence gap", () => {
+    loadChatHistoryMock.mockReset();
+    const host = createHost();
+    host.sessionKey = "agent:qa:main";
+    host.chatMessages = [
+      {
+        role: "user",
+        content: [{ type: "text", text: "Hi" }],
+        __openclaw: { id: "msg-1", seq: 1 },
+      },
+    ];
+
+    handleGatewayEvent(host, {
+      type: "event",
+      event: "session.message",
+      payload: {
+        sessionKey: "agent:qa:main",
+        messageId: "msg-3",
+        messageSeq: 3,
+        message: {
+          role: "assistant",
+          content: [{ type: "text", text: "Skipped one" }],
+        },
+      },
+      seq: 1,
+    });
+
+    expect(loadChatHistoryMock).toHaveBeenCalledTimes(1);
+    expect(loadChatHistoryMock).toHaveBeenCalledWith(host);
+  });
+
+  it("reloads history when session revisions skip ahead even without a transcript sequence gap", () => {
+    loadChatHistoryMock.mockReset();
+    const host = createHost() as TestGatewayHost & {
+      sessionsResult: {
+        defaults: Record<string, unknown>;
+        sessions: Array<Record<string, unknown>>;
+      };
+    };
+    host.sessionKey = "agent:qa:main";
+    host.sessionsResult = {
+      defaults: {},
+      sessions: [
+        {
+          key: "agent:qa:main",
+          kind: "direct",
+          sessionRevision: 1,
+        },
+      ],
+    };
+    host.chatMessages = [
+      {
+        role: "user",
+        content: [{ type: "text", text: "Hi" }],
+        __openclaw: { id: "msg-1", seq: 1 },
+      },
+    ];
+
+    handleGatewayEvent(host, {
+      type: "event",
+      event: "session.message",
+      payload: {
+        sessionKey: "agent:qa:main",
+        messageId: "msg-2",
+        messageSeq: 2,
+        sessionRevision: 3,
+        message: {
+          role: "assistant",
+          content: [{ type: "text", text: "Hello there" }],
+        },
+      },
       seq: 1,
     });
 

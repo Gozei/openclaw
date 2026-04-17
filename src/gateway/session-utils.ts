@@ -3,6 +3,7 @@ import path from "node:path";
 import {
   resolveAgentEffectiveModelPrimary,
   resolveAgentModelFallbacksOverride,
+  resolveSessionAgentId,
   resolveAgentWorkspaceDir,
   resolveDefaultAgentId,
 } from "../agents/agent-scope.js";
@@ -61,6 +62,7 @@ import {
 } from "../shared/string-coerce.js";
 import { normalizeSessionDeliveryFields } from "../utils/delivery-context.shared.js";
 import { estimateUsageCost, resolveModelCostConfig } from "../utils/usage-format.js";
+import { peekSessionEventRevision } from "./session-event-revision.js";
 import {
   canonicalizeSessionKeyForAgent,
   canonicalizeSpawnedByForAgent,
@@ -409,6 +411,18 @@ export function loadSessionEntry(sessionKey: string) {
   const freshestMatch = resolveFreshestSessionStoreMatchFromStoreKeys(store, target.storeKeys);
   const legacyKey = freshestMatch?.key !== canonicalKey ? freshestMatch?.key : undefined;
   return { cfg, storePath, store, entry: freshestMatch?.entry, canonicalKey, legacyKey };
+}
+
+export function resolveLoadedSessionAgentId(params: {
+  cfg: OpenClawConfig;
+  sessionKey: string;
+  entry?: Pick<SessionEntry, "agentOverrideId">;
+}): string {
+  return resolveSessionAgentId({
+    sessionKey: params.sessionKey,
+    config: params.cfg,
+    sessionEntry: params.entry,
+  });
 }
 
 export function resolveFreshestSessionStoreMatchFromStoreKeys(
@@ -1146,7 +1160,12 @@ export function buildGatewaySessionRow(params: {
     originLabel;
   const deliveryFields = normalizeSessionDeliveryFields(entry);
   const parsedAgent = parseAgentSessionKey(key);
-  const sessionAgentId = normalizeAgentId(parsedAgent?.agentId ?? resolveDefaultAgentId(cfg));
+  const storeAgentId = normalizeAgentId(parsedAgent?.agentId ?? resolveDefaultAgentId(cfg));
+  const sessionAgentId = resolveSessionAgentId({
+    sessionKey: key,
+    config: cfg,
+    sessionEntry: entry,
+  });
   const subagentRun = getSessionDisplaySubagentRunByChildSessionKey(key);
   const subagentOwner =
     normalizeOptionalString(subagentRun?.controllerSessionKey) ||
@@ -1240,7 +1259,7 @@ export function buildGatewaySessionRow(params: {
       entry.sessionId,
       storePath,
       entry.sessionFile,
-      sessionAgentId,
+      storeAgentId,
     );
     if (params.includeDerivedTitles) {
       derivedTitle = deriveSessionTitle(entry, fields.firstUserMessage);
@@ -1252,6 +1271,9 @@ export function buildGatewaySessionRow(params: {
 
   return {
     key,
+    agentId: sessionAgentId,
+    agentOverrideId: entry?.agentOverrideId,
+    sessionRevision: peekSessionEventRevision(key),
     spawnedBy: subagentOwner || entry?.spawnedBy,
     spawnedWorkspaceDir: entry?.spawnedWorkspaceDir,
     forkedFromParent: entry?.forkedFromParent,
@@ -1359,14 +1381,7 @@ export function listSessionsFromStore(params: {
         return false;
       }
       if (agentId) {
-        if (key === "global" || key === "unknown") {
-          return false;
-        }
-        const parsed = parseAgentSessionKey(key);
-        if (!parsed) {
-          return false;
-        }
-        return normalizeAgentId(parsed.agentId) === agentId;
+        return key !== "global" && key !== "unknown";
       }
       return true;
     })
@@ -1413,6 +1428,10 @@ export function listSessionsFromStore(params: {
         (f) => typeof f === "string" && normalizeLowercaseStringOrEmpty(f).includes(search),
       );
     });
+  }
+
+  if (agentId) {
+    sessions = sessions.filter((session) => session.agentId === agentId);
   }
 
   if (activeMinutes !== undefined) {

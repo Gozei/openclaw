@@ -316,7 +316,22 @@ export function loadAuthProfileStoreForRuntime(
 }
 
 export function loadAuthProfileStoreForSecretsRuntime(agentDir?: string): AuthProfileStore {
-  return loadAuthProfileStoreForRuntime(agentDir, { readOnly: true, allowKeychainPrompt: false });
+  const options: LoadAuthProfileStoreOptions = {
+    readOnly: true,
+    allowKeychainPrompt: false,
+    // Secrets runtime activation should stay side-effect free and avoid
+    // external auth/plugin resolution so gateway startup can't block on them.
+    syncExternalCli: false,
+  };
+  const store = loadAuthProfileStoreForAgent(agentDir, options);
+  const authPath = resolveAuthStorePath(agentDir);
+  const mainAuthPath = resolveAuthStorePath();
+  if (!agentDir || authPath === mainAuthPath) {
+    return store;
+  }
+
+  const mainStore = loadAuthProfileStoreForAgent(undefined, options);
+  return mergeAuthProfileStores(mainStore, store);
 }
 
 export function ensureAuthProfileStore(

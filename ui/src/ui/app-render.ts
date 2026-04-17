@@ -1,9 +1,5 @@
 import { html, nothing } from "lit";
-import {
-  buildAgentMainSessionKey,
-  parseAgentSessionKey,
-  resolveAgentIdFromSessionKey,
-} from "../../../src/routing/session-key.js";
+import { buildAgentMainSessionKey } from "../../../src/routing/session-key.js";
 import { t } from "../i18n/index.ts";
 import { getSafeLocalStorage } from "../local-storage.ts";
 import { refreshChatAvatar } from "./app-chat.ts";
@@ -20,6 +16,7 @@ import {
 } from "./app-render.helpers.ts";
 import { warnQueryToken } from "./app-settings.ts";
 import type { AppViewState } from "./app-view-state.ts";
+import { BRAND_NAME, BRAND_SIDEBAR_EYEBROW } from "./brand.ts";
 import { loadAgentFileContent, loadAgentFiles, saveAgentFile } from "./controllers/agent-files.ts";
 import { loadAgentIdentities, loadAgentIdentity } from "./controllers/agent-identity.ts";
 import { loadAgentSkills } from "./controllers/agent-skills.ts";
@@ -115,10 +112,11 @@ import {
   updateSkillEnabled,
 } from "./controllers/skills.ts";
 import { buildExternalLinkRel, EXTERNAL_LINK_TARGET } from "./external-link.ts";
-import "./components/dashboard-header.ts";
 import { icons } from "./icons.ts";
+import "./components/dashboard-header.ts";
 import { normalizeBasePath, TAB_GROUPS, subtitleForTab, titleForTab } from "./navigation.ts";
 import { isPluginEnabledInConfigSnapshot } from "./plugin-activation.ts";
+import { resolveEffectiveSessionAgentId } from "./session-runtime.ts";
 import { agentLogoUrl } from "./views/agents-utils.ts";
 import {
   resolveAgentConfig,
@@ -384,8 +382,12 @@ function normalizeScopedConfigSelection(
 
 function resolveAssistantAvatarUrl(state: AppViewState): string | undefined {
   const list = state.agentsList?.agents ?? [];
-  const parsed = parseAgentSessionKey(state.sessionKey);
-  const agentId = parsed?.agentId ?? state.agentsList?.defaultId ?? "main";
+  const agentId =
+    resolveEffectiveSessionAgentId({
+      sessionKey: state.sessionKey,
+      sessionsResult: state.sessionsResult,
+      defaultAgentId: state.agentsList?.defaultId,
+    }) ?? "main";
   const agent = list.find((entry) => entry.id === agentId);
   const identity = agent?.identity;
   const candidate = identity?.avatarUrl ?? identity?.avatar;
@@ -504,7 +506,11 @@ export function renderApp(state: AppViewState) {
     state.agentsList?.agents?.[0]?.id ??
     null;
   const resolvedAgentId = resolveSelectedAgentId();
-  const activeSessionAgentId = resolveAgentIdFromSessionKey(state.sessionKey);
+  const activeSessionAgentId = resolveEffectiveSessionAgentId({
+    sessionKey: state.sessionKey,
+    sessionsResult: state.sessionsResult,
+    defaultAgentId: state.agentsList?.defaultId,
+  });
   const toolsPanelUsesActiveSession = Boolean(
     resolvedAgentId && activeSessionAgentId && resolvedAgentId === activeSessionAgentId,
   );
@@ -878,7 +884,7 @@ export function renderApp(state: AppViewState) {
             <span class="nav-collapse-toggle__icon" aria-hidden="true">${icons.menu}</span>
           </button>
           <div class="topnav-shell__content">
-            <dashboard-header .tab=${state.tab}></dashboard-header>
+            <dashboard-header .tab=${state.tab} .basePath=${basePath}></dashboard-header>
           </div>
           <div class="topnav-shell__actions">
             <button
@@ -910,11 +916,11 @@ export function renderApp(state: AppViewState) {
                       <img
                         class="sidebar-brand__logo"
                         src="${agentLogoUrl(basePath)}"
-                        alt="OpenClaw"
+                        alt=${BRAND_NAME}
                       />
                       <span class="sidebar-brand__copy">
-                        <span class="sidebar-brand__eyebrow">${t("nav.control")}</span>
-                        <span class="sidebar-brand__title">OpenClaw</span>
+                        <span class="sidebar-brand__eyebrow">${BRAND_SIDEBAR_EYEBROW}</span>
+                        <span class="sidebar-brand__title">${BRAND_NAME}</span>
                       </span>
                     `}
               </div>
@@ -1191,6 +1197,7 @@ export function renderApp(state: AppViewState) {
               m.renderSessions({
                 loading: state.sessionsLoading,
                 result: state.sessionsResult,
+                agentsList: state.agentsList,
                 error: state.sessionsError,
                 activeMinutes: state.sessionsFilterActive,
                 limit: state.sessionsFilterLimit,
@@ -1488,7 +1495,14 @@ export function renderApp(state: AppViewState) {
                     ) {
                       void loadToolsCatalog(state, resolvedAgentId);
                     }
-                    if (resolvedAgentId === resolveAgentIdFromSessionKey(state.sessionKey)) {
+                    if (
+                      resolvedAgentId ===
+                      resolveEffectiveSessionAgentId({
+                        sessionKey: state.sessionKey,
+                        sessionsResult: state.sessionsResult,
+                        defaultAgentId: state.agentsList?.defaultId,
+                      })
+                    ) {
                       const toolsRequestKey = buildToolsEffectiveRequestKey(state, {
                         agentId: resolvedAgentId,
                         sessionKey: state.sessionKey,
@@ -1903,7 +1917,16 @@ export function renderApp(state: AppViewState) {
                 }
               },
               agentsList: state.agentsList,
-              currentAgentId: resolvedAgentId ?? "main",
+              currentAgentId:
+                state.sessionsResult?.sessions?.find((row) => row.key === state.sessionKey)
+                  ?.agentId ??
+                resolveEffectiveSessionAgentId({
+                  sessionKey: state.sessionKey,
+                  sessionsResult: state.sessionsResult,
+                  defaultAgentId: state.agentsList?.defaultId,
+                }) ??
+                state.agentsList?.defaultId ??
+                "main",
               onAgentChange: (agentId: string) => {
                 switchChatSession(state, buildAgentMainSessionKey({ agentId }));
               },

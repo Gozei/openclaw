@@ -14,6 +14,10 @@ import type {
 export type SessionsProps = {
   loading: boolean;
   result: SessionsListResult | null;
+  agentsList: {
+    agents: Array<{ id: string; name?: string }>;
+    defaultId?: string;
+  } | null;
   error: string | null;
   activeMinutes: string;
   limit: string;
@@ -45,6 +49,7 @@ export type SessionsProps = {
   onPatch: (
     key: string,
     patch: {
+      agentId?: string | null;
       label?: string | null;
       thinkingLevel?: string | null;
       fastMode?: boolean | null;
@@ -389,6 +394,7 @@ export function renderSessions(props: SessionsProps) {
                     : nothing}
                 </th>
                 ${sortHeader("key", "Key", "data-table-key-col")}
+                <th>Agent</th>
                 <th>Label</th>
                 ${sortHeader("kind", "Kind")} ${sortHeader("updated", "Updated")}
                 ${sortHeader("tokens", "Tokens")}
@@ -404,7 +410,7 @@ export function renderSessions(props: SessionsProps) {
                 ? html`
                     <tr>
                       <td
-                        colspan="11"
+                        colspan="12"
                         style="text-align: center; padding: 48px 16px; color: var(--muted)"
                       >
                         No sessions found.
@@ -469,6 +475,9 @@ function renderRows(row: GatewaySessionRow, props: SessionsProps) {
   const checkpointError = props.checkpointErrorByKey[row.key];
   const displayName = normalizeOptionalString(row.displayName) ?? null;
   const trimmedLabel = normalizeOptionalString(row.label) ?? "";
+  const effectiveAgentId =
+    normalizeOptionalString(row.agentId) ?? props.agentsList?.defaultId ?? "main";
+  const agentOverrideId = normalizeOptionalString(row.agentOverrideId) ?? "";
   const showDisplayName = Boolean(
     displayName && displayName !== row.key && displayName !== trimmedLabel,
   );
@@ -524,6 +533,26 @@ function renderRows(row: GatewaySessionRow, props: SessionsProps) {
             ? html`<span class="muted session-key-display-name">${displayName}</span>`
             : nothing}
         </div>
+      </td>
+      <td>
+        <select
+          ?disabled=${props.loading || row.kind === "global"}
+          style="padding: 6px 10px; font-size: 13px; border: 1px solid var(--border); border-radius: var(--radius-sm); min-width: 120px; max-width: 180px;"
+          @change=${(e: Event) => {
+            const value = normalizeOptionalString((e.target as HTMLSelectElement).value) ?? null;
+            props.onPatch(row.key, { agentId: value });
+          }}
+        >
+          <option value="" ?selected=${agentOverrideId === ""}>
+            ${props.agentsList?.defaultId ? `default (${props.agentsList.defaultId})` : "default"}
+          </option>
+          ${(props.agentsList?.agents ?? []).map(
+            (agent) => html`<option value=${agent.id} ?selected=${agentOverrideId === agent.id}>
+              ${agent.name && agent.name !== agent.id ? `${agent.name} (${agent.id})` : agent.id}
+              ${effectiveAgentId === agent.id && agentOverrideId === "" ? " [effective]" : ""}
+            </option>`,
+          )}
+        </select>
       </td>
       <td>
         <input
@@ -640,7 +669,7 @@ function renderRows(row: GatewaySessionRow, props: SessionsProps) {
     ...(isExpanded
       ? [
           html`<tr>
-            <td colspan="11" style="padding: 0;">
+            <td colspan="12" style="padding: 0;">
               <div
                 style="padding: 14px 16px; border-top: 1px solid var(--border); background: var(--surface-2, rgba(127, 127, 127, 0.05));"
               >

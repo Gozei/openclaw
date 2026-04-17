@@ -50,7 +50,7 @@ const runtimeMocks = vi.hoisted(() => ({
     ],
   })),
   resolveReplyToMode: vi.fn(() => "first"),
-  resolveSessionAgentId: vi.fn(() => "main"),
+  resolveLoadedSessionAgentId: vi.fn(() => "main"),
   resolveSessionModelRef: vi.fn(() => ({ provider: "openai", model: "gpt-4.1" })),
 }));
 
@@ -165,6 +165,39 @@ describe("tools.effective handler", () => {
         modelId: "gpt-4.1",
       }),
     );
+  });
+
+  it("uses the loaded session override when resolving the effective agent", async () => {
+    runtimeMocks.loadSessionEntry.mockReturnValueOnce({
+      cfg: {},
+      canonicalKey: "agent:main:main",
+      entry: {
+        sessionId: "session-override",
+        updatedAt: 1,
+        agentOverrideId: "ops",
+        lastChannel: "telegram",
+        lastAccountId: "acct-1",
+        lastThreadId: "thread-2",
+        lastTo: "channel-1",
+      },
+    } as never);
+    runtimeMocks.resolveLoadedSessionAgentId.mockReturnValueOnce("ops");
+
+    const { respond, invoke } = createInvokeParams({ sessionKey: "agent:main:main" });
+    await invoke();
+
+    expect(runtimeMocks.resolveLoadedSessionAgentId).toHaveBeenCalledWith({
+      sessionKey: "agent:main:main",
+      cfg: {},
+      entry: expect.objectContaining({
+        sessionId: "session-override",
+        agentOverrideId: "ops",
+      }),
+    });
+    expect(runtimeMocks.resolveEffectiveToolInventory).toHaveBeenCalledWith(
+      expect.objectContaining({ agentId: "ops" }),
+    );
+    expect((respond.mock.calls[0] as RespondCall | undefined)?.[0]).toBe(true);
   });
 
   it("falls back to origin.threadId when delivery context omits thread metadata", async () => {

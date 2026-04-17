@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { resolveAgentModelFallbackValues } from "../config/model-input.js";
+import type { SessionEntry } from "../config/sessions/types.js";
 import type { AgentDefaultsConfig } from "../config/types.agent-defaults.js";
 import type { OpenClawConfig } from "../config/types.js";
 import {
@@ -47,6 +48,7 @@ export function resolveSessionAgentIds(params: {
   sessionKey?: string;
   config?: OpenClawConfig;
   agentId?: string;
+  sessionEntry?: Pick<SessionEntry, "agentOverrideId">;
 }): {
   defaultAgentId: string;
   sessionAgentId: string;
@@ -54,17 +56,27 @@ export function resolveSessionAgentIds(params: {
   const defaultAgentId = resolveDefaultAgentId(params.config ?? {});
   const explicitAgentIdRaw = normalizeLowercaseStringOrEmpty(params.agentId);
   const explicitAgentId = explicitAgentIdRaw ? normalizeAgentId(explicitAgentIdRaw) : null;
+  const sessionOverrideAgentIdRaw = normalizeLowercaseStringOrEmpty(
+    params.sessionEntry?.agentOverrideId,
+  );
+  const sessionOverrideAgentId = sessionOverrideAgentIdRaw
+    ? normalizeAgentId(sessionOverrideAgentIdRaw)
+    : null;
   const sessionKey = params.sessionKey?.trim();
   const normalizedSessionKey = sessionKey ? normalizeLowercaseStringOrEmpty(sessionKey) : undefined;
   const parsed = normalizedSessionKey ? parseAgentSessionKey(normalizedSessionKey) : null;
   const sessionAgentId =
-    explicitAgentId ?? (parsed?.agentId ? normalizeAgentId(parsed.agentId) : defaultAgentId);
+    explicitAgentId ??
+    sessionOverrideAgentId ??
+    (parsed?.agentId ? normalizeAgentId(parsed.agentId) : defaultAgentId);
   return { defaultAgentId, sessionAgentId };
 }
 
 export function resolveSessionAgentId(params: {
   sessionKey?: string;
   config?: OpenClawConfig;
+  agentId?: string;
+  sessionEntry?: Pick<SessionEntry, "agentOverrideId">;
 }): string {
   return resolveSessionAgentIds(params).sessionAgentId;
 }

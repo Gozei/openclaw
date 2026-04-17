@@ -6,21 +6,21 @@
   margin-bottom: 10px;
   padding: 10px 12px;
   border-radius: var(--radius-md);
-  border: 1px dashed rgba(255, 255, 255, 0.18);
-  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  background: color-mix(in srgb, var(--bg-elevated) 92%, transparent);
   color: var(--muted);
   font-size: 12px;
   line-height: 1.4;
 }
 
 :root[data-theme-mode="light"] .chat-thinking {
-  border-color: rgba(16, 24, 40, 0.25);
-  background: rgba(16, 24, 40, 0.04);
+  border-color: color-mix(in srgb, var(--border) 72%, transparent);
+  background: color-mix(in srgb, var(--bg-hover) 48%, transparent);
 }
 
 .chat-text {
   font-size: 14px;
-  line-height: 1.5;
+  line-height: 1.62;
   word-wrap: break-word;
   overflow-wrap: break-word;
 }
@@ -58,7 +58,8 @@
 .chat-text :where(a) {
   color: var(--accent);
   text-decoration: underline;
-  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
 }
 
 .chat-text :where(a:hover) {
@@ -77,24 +78,26 @@
   width: auto;
   height: auto;
   margin-top: 0.75em;
-  border: 1px solid var(--border);
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
   border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--secondary) 70%, transparent);
+  background: color-mix(in srgb, var(--bg-elevated) 92%, transparent);
   object-fit: contain;
 }
 
 .chat-text :where(:not(pre) > code) {
-  background: rgba(0, 0, 0, 0.15);
-  padding: 0.15em 0.4em;
-  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent-subtle) 58%, transparent);
+  padding: 0.16em 0.45em;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
   overflow-wrap: normal;
   word-break: keep-all;
 }
 
 .chat-text :where(pre) {
-  background: rgba(0, 0, 0, 0.15);
-  border-radius: var(--radius-sm);
-  padding: 10px 12px;
+  background: color-mix(in srgb, var(--bg-accent) 94%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: 12px;
+  padding: 12px 14px;
   overflow-x: auto;
 }
 
@@ -104,12 +107,12 @@
 }
 
 .chat-text :where(blockquote) {
-  border-left: 3px solid var(--border-strong);
+  border-left: 3px solid color-mix(in srgb, var(--accent) 36%, var(--border));
   padding-left: 12px;
   margin-left: 0;
   color: var(--muted);
-  background: rgba(255, 255, 255, 0.02);
-  padding: 8px 12px;
+  background: color-mix(in srgb, var(--bg-elevated) 92%, transparent);
+  padding: 10px 12px;
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 }
 
@@ -125,7 +128,7 @@
 }
 
 :root[data-theme-mode="light"] .chat-text :where(blockquote) {
-  background: rgba(0, 0, 0, 0.03);
+  background: color-mix(in srgb, var(--bg-hover) 48%, transparent);
 }
 
 :root[data-theme-mode="light"] .chat-text :where(blockquote blockquote) {
@@ -137,13 +140,13 @@
 }
 
 :root[data-theme-mode="light"] .chat-text :where(:not(pre) > code) {
-  background: rgba(0, 0, 0, 0.08);
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: color-mix(in srgb, var(--accent-subtle) 80%, white 20%);
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
 }
 
 :root[data-theme-mode="light"] .chat-text :where(pre) {
-  background: rgba(0, 0, 0, 0.05);
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: color-mix(in srgb, var(--bg-accent) 84%, white 16%);
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
 }
 
 .chat-text :where(hr) {

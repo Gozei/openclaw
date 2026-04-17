@@ -5,6 +5,7 @@ import type {
   SessionEventSubscriberRegistry,
   SessionMessageSubscriberRegistry,
 } from "./server-chat.js";
+import { nextSessionEventRevision } from "./session-event-revision.js";
 import { resolveSessionKeyForTranscriptFile } from "./session-transcript-key.js";
 import {
   attachOpenClawTranscriptMeta,
@@ -50,6 +51,7 @@ function buildGatewaySessionSnapshot(params: {
     deliveryContext: sessionRow.deliveryContext,
     parentSessionKey: params.parentSessionKey ?? sessionRow.parentSessionKey,
     childSessions: sessionRow.childSessions,
+    sessionRevision: sessionRow.sessionRevision,
     thinkingLevel: sessionRow.thinkingLevel,
     fastMode: sessionRow.fastMode,
     verboseLevel: sessionRow.verboseLevel,
@@ -100,6 +102,7 @@ export function createTranscriptUpdateBroadcastHandler(params: {
     if (connIds.size === 0) {
       return;
     }
+    const sessionRevision = nextSessionEventRevision(sessionKey);
     const { entry, storePath } = loadSessionEntry(sessionKey);
     const messageSeq = entry?.sessionId
       ? readSessionMessages(entry.sessionId, storePath, entry.sessionFile).length
@@ -119,6 +122,7 @@ export function createTranscriptUpdateBroadcastHandler(params: {
         message,
         ...(typeof update.messageId === "string" ? { messageId: update.messageId } : {}),
         ...(typeof messageSeq === "number" ? { messageSeq } : {}),
+        ...(typeof sessionRevision === "number" ? { sessionRevision } : {}),
         ...sessionSnapshot,
       },
       connIds,
@@ -137,6 +141,7 @@ export function createTranscriptUpdateBroadcastHandler(params: {
         ts: Date.now(),
         ...(typeof update.messageId === "string" ? { messageId: update.messageId } : {}),
         ...(typeof messageSeq === "number" ? { messageSeq } : {}),
+        ...(typeof sessionRevision === "number" ? { sessionRevision } : {}),
         ...sessionSnapshot,
       },
       sessionEventConnIds,
@@ -154,6 +159,7 @@ export function createLifecycleEventBroadcastHandler(params: {
     if (connIds.size === 0) {
       return;
     }
+    const sessionRevision = nextSessionEventRevision(event.sessionKey);
     params.broadcastToConnIds(
       "sessions.changed",
       {
@@ -163,6 +169,7 @@ export function createLifecycleEventBroadcastHandler(params: {
         label: event.label,
         displayName: event.displayName,
         ts: Date.now(),
+        ...(typeof sessionRevision === "number" ? { sessionRevision } : {}),
         ...buildGatewaySessionSnapshot({
           sessionRow: loadGatewaySessionRow(event.sessionKey),
           label: event.label,

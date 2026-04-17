@@ -3,7 +3,7 @@ import {
   resolvePreferredServerChatModelValue,
 } from "../chat-model-ref.ts";
 import type { GatewayBrowserClient } from "../gateway.ts";
-import { resolveAgentIdFromSessionKey } from "../session-key.ts";
+import { resolveEffectiveSessionAgentId } from "../session-runtime.ts";
 import type {
   AgentsListResult,
   ChatModelOverride,
@@ -198,7 +198,11 @@ export function refreshVisibleToolsEffectiveForCurrentSession(
   if (!resolvedSessionKey || state.agentsPanel !== "tools" || !state.agentsSelectedId) {
     return undefined;
   }
-  const sessionAgentId = resolveAgentIdFromSessionKey(resolvedSessionKey);
+  const sessionAgentId = resolveEffectiveSessionAgentId({
+    sessionKey: resolvedSessionKey,
+    sessionsResult: state.sessionsResult ?? null,
+    defaultAgentId: state.agentsList?.defaultId,
+  });
   if (!sessionAgentId || state.agentsSelectedId !== sessionAgentId) {
     return undefined;
   }

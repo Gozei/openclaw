@@ -398,6 +398,9 @@ export type SessionCompactionCheckpoint = {
 
 export type GatewaySessionRow = {
   key: string;
+  agentId?: string;
+  agentOverrideId?: string;
+  sessionRevision?: number;
   spawnedBy?: string;
   kind: "direct" | "group" | "global" | "unknown";
   label?: string;

@@ -16,6 +16,7 @@ import {
 } from "./control-reply-text.js";
 import { loadGatewaySessionRow } from "./server-chat.load-gateway-session-row.runtime.js";
 import { persistGatewaySessionLifecycleEvent } from "./server-chat.persist-session-lifecycle.runtime.js";
+import { nextSessionEventRevision } from "./session-event-revision.js";
 import { deriveGatewaySessionLifecycleSnapshot } from "./session-lifecycle-state.js";
 import { loadSessionEntry } from "./session-utils.js";
 import { formatForLog } from "./ws-log.js";
@@ -543,6 +544,7 @@ export function createAgentEventHandler({
       deliveryContext: row?.deliveryContext,
       parentSessionKey: row?.parentSessionKey,
       childSessions: row?.childSessions,
+      sessionRevision: row?.sessionRevision,
       thinkingLevel: row?.thinkingLevel,
       fastMode: row?.fastMode,
       verboseLevel: row?.verboseLevel,
@@ -650,6 +652,7 @@ export function createAgentEventHandler({
       void persistGatewaySessionLifecycleEvent({ sessionKey, event: evt }).catch(() => undefined);
       const sessionEventConnIds = sessionEventSubscribers.getAll();
       if (sessionEventConnIds.size > 0) {
+        const sessionRevision = nextSessionEventRevision(sessionKey);
         broadcastToConnIds(
           "sessions.changed",
           {
@@ -657,6 +660,7 @@ export function createAgentEventHandler({
             phase: lifecyclePhase,
             runId: evt.runId,
             ts: evt.ts,
+            ...(typeof sessionRevision === "number" ? { sessionRevision } : {}),
             ...buildSessionEventSnapshot(sessionKey, evt),
           },
           sessionEventConnIds,
@@ -1005,6 +1009,7 @@ export function createAgentEventHandler({
       void persistGatewaySessionLifecycleEvent({ sessionKey, event: evt }).catch(() => undefined);
       const sessionEventConnIds = sessionEventSubscribers.getAll();
       if (sessionEventConnIds.size > 0) {
+        const sessionRevision = nextSessionEventRevision(sessionKey);
         broadcastToConnIds(
           "sessions.changed",
           {
@@ -1012,6 +1017,7 @@ export function createAgentEventHandler({
             phase: lifecyclePhase,
             runId: evt.runId,
             ts: evt.ts,
+            ...(typeof sessionRevision === "number" ? { sessionRevision } : {}),
             ...buildSessionEventSnapshot(sessionKey, evt),
           },
           sessionEventConnIds,

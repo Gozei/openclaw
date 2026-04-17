@@ -1,13 +1,9 @@
-import { resolveDefaultAgentId } from "../agents/agent-scope.js";
+import { resolveDefaultAgentId, resolveSessionAgentId } from "../agents/agent-scope.js";
 import { cleanupBrowserSessionsForLifecycleEnd } from "../browser-lifecycle-cleanup.js";
 import type { CliDeps } from "../cli/deps.types.js";
 import { createOutboundSendDeps } from "../cli/outbound-send-deps.js";
 import { loadConfig } from "../config/config.js";
-import {
-  canonicalizeMainSessionAlias,
-  resolveAgentIdFromSessionKey,
-  resolveAgentMainSessionKey,
-} from "../config/sessions.js";
+import { canonicalizeMainSessionAlias, resolveAgentMainSessionKey } from "../config/sessions.js";
 import { resolveStorePath } from "../config/sessions/paths.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import {
@@ -40,6 +36,7 @@ import {
   normalizeOptionalLowercaseString,
   normalizeOptionalString,
 } from "../shared/string-coerce.js";
+import { loadSessionEntry } from "./session-utils.js";
 
 export type GatewayCronState = {
   cron: CronService;
@@ -224,7 +221,12 @@ export function buildGatewayCronService(params: {
       sessionKey: candidate,
     });
     if (canonical !== "global") {
-      const sessionAgentId = resolveAgentIdFromSessionKey(canonical);
+      const loaded = loadSessionEntry(canonical);
+      const sessionAgentId = resolveSessionAgentId({
+        sessionKey: loaded.canonicalKey ?? canonical,
+        config: loaded.cfg,
+        sessionEntry: loaded.entry,
+      });
       if (normalizeAgentId(sessionAgentId) !== normalizeAgentId(params.agentId)) {
         return resolveAgentMainSessionKey({
           cfg: params.runtimeConfig,
@@ -240,10 +242,21 @@ export function buildGatewayCronService(params: {
       typeof opts?.agentId === "string" && opts.agentId.trim()
         ? normalizeAgentId(opts.agentId)
         : undefined;
+    const requestedSessionKey =
+      typeof opts?.sessionKey === "string" && opts.sessionKey.trim() ? opts.sessionKey : undefined;
     const derivedAgentId =
       requestedAgentId ??
-      (opts?.sessionKey
-        ? normalizeAgentId(resolveAgentIdFromSessionKey(opts.sessionKey))
+      (requestedSessionKey
+        ? (() => {
+            const loaded = loadSessionEntry(requestedSessionKey);
+            return normalizeAgentId(
+              resolveSessionAgentId({
+                sessionKey: loaded.canonicalKey ?? requestedSessionKey,
+                config: loaded.cfg,
+                sessionEntry: loaded.entry,
+              }),
+            );
+          })()
         : undefined);
     const runtimeConfigBase = loadConfig();
     const runtimeConfig =
@@ -252,11 +265,11 @@ export function buildGatewayCronService(params: {
         : runtimeConfigBase;
     const agentId = derivedAgentId || undefined;
     const sessionKey =
-      opts?.sessionKey && agentId
+      requestedSessionKey && agentId
         ? resolveCronSessionKey({
             runtimeConfig,
             agentId,
-            requestedSessionKey: opts.sessionKey,
+            requestedSessionKey,
           })
         : undefined;
     return { runtimeConfig, agentId, sessionKey };

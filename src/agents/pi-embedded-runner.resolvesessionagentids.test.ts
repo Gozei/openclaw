@@ -65,4 +65,23 @@ describe("resolveSessionAgentIds", () => {
     });
     expect(sessionAgentId).toBe("main");
   });
+
+  it("prefers a session override over the session key agent", () => {
+    const { sessionAgentId } = resolveSessionAgentIds({
+      sessionKey: "agent:main:main",
+      sessionEntry: { agentOverrideId: "beta" },
+      config: cfg,
+    });
+    expect(sessionAgentId).toBe("beta");
+  });
+
+  it("keeps explicit agentId highest priority over session overrides", () => {
+    const { sessionAgentId } = resolveSessionAgentIds({
+      sessionKey: "agent:beta:main",
+      agentId: "main",
+      sessionEntry: { agentOverrideId: "beta" },
+      config: cfg,
+    });
+    expect(sessionAgentId).toBe("main");
+  });
 });

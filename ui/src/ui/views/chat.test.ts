@@ -926,6 +926,48 @@ describe("chat view", () => {
     vi.unstubAllGlobals();
   });
 
+  it("patches the current session agent from the chat header picker", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+      } satisfies Partial<Response>),
+    );
+    const { state, request } = createChatHeaderState();
+    state.agentsList = {
+      defaultId: "main",
+      mainKey: "main",
+      scope: "user",
+      agents: [
+        { id: "main", name: "Main" },
+        { id: "ops", name: "Ops" },
+      ],
+    };
+    state.sessionsResult = createSessionsListResult();
+    state.sessionsResult.sessions[0] = {
+      ...state.sessionsResult.sessions[0],
+      agentId: "main",
+    };
+    const container = document.createElement("div");
+    render(renderChatSessionSelect(state), container);
+
+    const agentSelect = container.querySelector<HTMLSelectElement>(
+      'select[data-chat-agent-select="true"]',
+    );
+    expect(agentSelect).not.toBeNull();
+    expect(agentSelect?.value).toBe("");
+
+    agentSelect!.value = "ops";
+    agentSelect!.dispatchEvent(new Event("change", { bubbles: true }));
+    await flushTasks();
+
+    expect(request).toHaveBeenCalledWith("sessions.patch", {
+      key: "main",
+      agentId: "ops",
+    });
+    vi.unstubAllGlobals();
+  });
+
   it("reloads effective tools after a chat-header model switch for the active tools panel", async () => {
     vi.stubGlobal(
       "fetch",

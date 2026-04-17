@@ -99,6 +99,9 @@ function stubWindowGlobals(storage?: ReturnType<typeof createStorageMock>) {
     setTimeout: (handler: (...args: unknown[]) => void, timeout?: number, ...args: unknown[]) =>
       globalThis.setTimeout(() => handler(...args), timeout),
     clearTimeout: (timeoutId: number | undefined) => globalThis.clearTimeout(timeoutId),
+    setInterval: (handler: (...args: unknown[]) => void, timeout?: number, ...args: unknown[]) =>
+      globalThis.setInterval(() => handler(...args), timeout),
+    clearInterval: (timeoutId: number | undefined) => globalThis.clearInterval(timeoutId),
   });
 }
 
@@ -118,6 +121,28 @@ function stubInsecureCrypto() {
 
 function parseLatestConnectFrame(ws: MockWebSocket): ConnectFrame {
   return JSON.parse(ws.sent.at(-1) ?? "{}") as ConnectFrame;
+}
+
+function emitHelloOk(
+  ws: MockWebSocket,
+  connectId: string | undefined,
+  overrides?: {
+    tickIntervalMs?: number;
+  },
+) {
+  ws.emitMessage({
+    type: "res",
+    id: connectId,
+    ok: true,
+    payload: {
+      type: "hello-ok",
+      protocol: 3,
+      policy:
+        typeof overrides?.tickIntervalMs === "number"
+          ? { tickIntervalMs: overrides.tickIntervalMs }
+          : undefined,
+    },
+  });
 }
 
 async function continueConnect(ws: MockWebSocket, nonce = "nonce-1") {
@@ -449,6 +474,41 @@ describe("GatewayBrowserClient", () => {
 
     await vi.advanceTimersByTimeAsync(30_000);
     expect(wsInstances).toHaveLength(1);
+
+    vi.useRealTimers();
+  });
+
+  it("times out browser RPC requests that never receive a response", async () => {
+    vi.useFakeTimers();
+    const client = new GatewayBrowserClient({
+      url: "ws://127.0.0.1:18789",
+      requestTimeoutMs: 250,
+    });
+
+    const { ws, connectFrame } = await startConnect(client);
+    emitHelloOk(ws, connectFrame.id);
+
+    const pending = client.request("health", {});
+    const rejection = expect(pending).rejects.toThrow("gateway request timeout for health");
+    await vi.advanceTimersByTimeAsync(250);
+    await rejection;
+
+    vi.useRealTimers();
+  });
+
+  it("closes stalled browser sockets after missing gateway ticks", async () => {
+    vi.useFakeTimers();
+    const client = new GatewayBrowserClient({
+      url: "ws://127.0.0.1:18789",
+      tickWatchMinIntervalMs: 10,
+    });
+
+    const { ws, connectFrame } = await startConnect(client);
+    emitHelloOk(ws, connectFrame.id, { tickIntervalMs: 50 });
+
+    await vi.advanceTimersByTimeAsync(160);
+
+    expect(ws.readyState).toBe(3);
 
     vi.useRealTimers();
   });

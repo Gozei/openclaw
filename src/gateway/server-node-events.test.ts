@@ -113,7 +113,7 @@ const runtimeMocks = vi.hoisted(() => ({
     },
   ),
   resolveOutboundTarget: vi.fn(({ to }: { to: string }) => ({ ok: true, to })),
-  resolveSessionAgentId: vi.fn(() => "main"),
+  resolveLoadedSessionAgentId: vi.fn(() => "main"),
   resolveSessionModelRef: vi.fn(
     (_cfg: OpenClawConfig, entry?: { model?: string; modelProvider?: string }) => ({
       provider: entry?.modelProvider ?? "test-provider",

@@ -90,6 +90,16 @@ const coreCliCommandCatalog = defineCommandDescriptorCatalog([
     description: "Inspect durable background task state",
     hasSubcommands: true,
   },
+  {
+    name: "evolve",
+    description: "Run self-evolution workflow (test + quality check + auto-commit)",
+    hasSubcommands: true,
+  },
+  {
+    name: "evolution",
+    description: "Alias for evolve (self-evolution workflow)",
+    hasSubcommands: true,
+  },
 ] as const satisfies ReadonlyArray<CoreCliCommandDescriptor>);
 
 export const CORE_CLI_COMMAND_DESCRIPTORS = coreCliCommandCatalog.descriptors;

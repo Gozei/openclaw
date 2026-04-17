@@ -721,6 +721,39 @@ describe("gateway server chat", () => {
     });
   });
 
+  test("chat.send forwards session agent overrides into reply dispatch", async () => {
+    await withMainSessionStore(async () => {
+      await writeSessionStore({
+        entries: {
+          main: {
+            sessionId: "sess-main",
+            updatedAt: Date.now(),
+            agentOverrideId: "ops",
+          },
+        },
+      });
+
+      dispatchInboundMessageMock.mockImplementationOnce(async (...args: unknown[]) => {
+        const [params] = args as [
+          { replyOptions?: { sessionEntry?: { agentOverrideId?: string } } },
+        ];
+        expect(params.replyOptions?.sessionEntry?.agentOverrideId).toBe("ops");
+        return { queuedFinal: false, counts: { final: 0, block: 0, tool: 0 } };
+      });
+
+      const res = await rpcReq(ws, "chat.send", {
+        sessionKey: "main",
+        message: "hello",
+        idempotencyKey: "idem-agent-override-1",
+      });
+
+      expect(res.ok).toBe(true);
+      await vi.waitFor(() => {
+        expect(dispatchInboundMessageMock).toHaveBeenCalled();
+      });
+    });
+  });
+
   test("routes block-streamed /btw replies through side-result events", async () => {
     await withMainSessionStore(async (dir) => {
       await fs.writeFile(

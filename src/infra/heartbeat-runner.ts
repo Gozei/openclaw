@@ -9,6 +9,7 @@ import {
   resolveAgentConfig,
   resolveAgentWorkspaceDir,
   resolveDefaultAgentId,
+  resolveSessionAgentId,
 } from "../agents/agent-scope.js";
 import { appendCronStyleCurrentTimeLine } from "../agents/current-time.js";
 import { resolveEffectiveMessagesConfig } from "../agents/identity.js";
@@ -43,14 +44,13 @@ import {
 import type { AgentDefaultsConfig } from "../config/types.agent-defaults.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { resolveCronSession } from "../cron/isolated-agent/session.js";
+import { loadSessionEntry } from "../gateway/session-utils.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { getQueueSize } from "../process/command-queue.js";
 import { CommandLane } from "../process/lanes.js";
 import {
   isSubagentSessionKey,
   normalizeAgentId,
-  parseAgentSessionKey,
-  resolveAgentIdFromSessionKey,
   toAgentStoreSessionKey,
 } from "../routing/session-key.js";
 import { defaultRuntime, type RuntimeEnv } from "../runtime.js";
@@ -266,7 +266,11 @@ function resolveHeartbeatSession(
         sessionKey: forcedCandidate,
       });
       if (forcedCanonical !== "global" && !isSubagentSessionKey(forcedCanonical)) {
-        const sessionAgentId = resolveAgentIdFromSessionKey(forcedCanonical);
+        const sessionAgentId = resolveSessionAgentId({
+          sessionKey: forcedCanonical,
+          config: cfg,
+          sessionEntry: store[forcedCanonical],
+        });
         if (sessionAgentId === normalizeAgentId(resolvedAgentId)) {
           return {
             sessionKey: forcedCanonical,
@@ -322,7 +326,11 @@ function resolveHeartbeatSession(
     sessionKey: candidate,
   });
   if (canonical !== "global" && !isSubagentSessionKey(canonical)) {
-    const sessionAgentId = resolveAgentIdFromSessionKey(canonical);
+    const sessionAgentId = resolveSessionAgentId({
+      sessionKey: canonical,
+      config: cfg,
+      sessionEntry: store[canonical],
+    });
     if (sessionAgentId === normalizeAgentId(resolvedAgentId)) {
       return {
         sessionKey: canonical,
@@ -706,8 +714,16 @@ export async function runHeartbeatOnce(opts: {
 }): Promise<HeartbeatRunResult> {
   const cfg = opts.cfg ?? loadConfig();
   const explicitAgentId = typeof opts.agentId === "string" ? opts.agentId.trim() : "";
+  const loadedSession =
+    explicitAgentId.length > 0 || !opts.sessionKey ? null : loadSessionEntry(opts.sessionKey);
   const forcedSessionAgentId =
-    explicitAgentId.length > 0 ? undefined : parseAgentSessionKey(opts.sessionKey)?.agentId;
+    explicitAgentId.length > 0 || !opts.sessionKey
+      ? undefined
+      : resolveSessionAgentId({
+          sessionKey: loadedSession?.canonicalKey ?? opts.sessionKey,
+          config: loadedSession?.cfg ?? cfg,
+          sessionEntry: loadedSession?.entry,
+        });
   const agentId = normalizeAgentId(
     explicitAgentId || forcedSessionAgentId || resolveDefaultAgentId(cfg),
   );
@@ -1011,6 +1027,7 @@ export async function runHeartbeatOnce(opts: {
       heartbeat?.lightContext === true ? "lightweight" : undefined;
     const replyOpts = {
       isHeartbeat: true,
+      sessionEntry: entry,
       ...(heartbeatModelOverride ? { heartbeatModelOverride } : {}),
       suppressToolErrorWarnings,
       // Heartbeat timeout is a per-run override so user turns keep the global default.
@@ -1419,7 +1436,21 @@ export function startHeartbeatRunner(opts: {
 
     try {
       if (requestedSessionKey || requestedAgentId) {
-        const targetAgentId = requestedAgentId ?? resolveAgentIdFromSessionKey(requestedSessionKey);
+        const loadedTargetSession = requestedSessionKey
+          ? loadSessionEntry(requestedSessionKey)
+          : null;
+        const targetAgentId =
+          requestedAgentId ??
+          (requestedSessionKey
+            ? resolveSessionAgentId({
+                sessionKey: loadedTargetSession?.canonicalKey ?? requestedSessionKey,
+                config: loadedTargetSession?.cfg ?? loadConfig(),
+                sessionEntry: loadedTargetSession?.entry,
+              })
+            : undefined);
+        if (!targetAgentId) {
+          return { status: "skipped", reason: "disabled" };
+        }
         const targetAgent = state.agents.get(targetAgentId);
         if (!targetAgent) {
           return { status: "skipped", reason: "disabled" };

@@ -34,6 +34,7 @@ import {
   validatePollParams,
   validateSendParams,
 } from "../protocol/index.js";
+import { loadSessionEntry, resolveLoadedSessionAgentId } from "../session-utils.js";
 import { formatForLog } from "../ws-log.js";
 import type { GatewayRequestContext, GatewayRequestHandlers } from "./types.js";
 
@@ -414,8 +415,13 @@ export const sendHandlers: GatewayRequestHandlers = {
         const mirrorMediaUrls = mirrorProjection.mediaUrls;
         const providedSessionKey = normalizeOptionalLowercaseString(request.sessionKey);
         const explicitAgentId = normalizeOptionalString(request.agentId);
+        const loadedSession = providedSessionKey ? loadSessionEntry(providedSessionKey) : null;
         const sessionAgentId = providedSessionKey
-          ? resolveSessionAgentId({ sessionKey: providedSessionKey, config: cfg })
+          ? resolveLoadedSessionAgentId({
+              sessionKey: loadedSession?.canonicalKey ?? providedSessionKey,
+              cfg: loadedSession?.cfg ?? cfg,
+              entry: loadedSession?.entry,
+            })
           : undefined;
         const defaultAgentId = resolveSessionAgentId({ config: cfg });
         const effectiveAgentId = explicitAgentId ?? sessionAgentId ?? defaultAgentId;

@@ -2,7 +2,11 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { CURRENT_SESSION_VERSION, SessionManager } from "@mariozechner/pi-coding-agent";
-import { resolveAgentWorkspaceDir, resolveDefaultAgentId } from "../../agents/agent-scope.js";
+import {
+  resolveAgentWorkspaceDir,
+  resolveDefaultAgentId,
+  resolveSessionAgentId,
+} from "../../agents/agent-scope.js";
 import {
   abortEmbeddedPiRun,
   isEmbeddedPiRunActive,
@@ -63,6 +67,7 @@ import {
   getSessionCompactionCheckpoint,
   listSessionCompactionCheckpoints,
 } from "../session-compaction-checkpoints.js";
+import { nextSessionEventRevision } from "../session-event-revision.js";
 import { reactivateCompletedSubagentSession } from "../session-subagent-reactivation.js";
 import {
   archiveFileOnDisk,
@@ -148,14 +153,19 @@ function emitSessionsChanged(
   if (connIds.size === 0) {
     return;
   }
+  const sessionRevision = payload.sessionKey
+    ? nextSessionEventRevision(payload.sessionKey)
+    : undefined;
   const sessionRow = payload.sessionKey ? loadGatewaySessionRow(payload.sessionKey) : null;
   context.broadcastToConnIds(
     "sessions.changed",
     {
       ...payload,
       ts: Date.now(),
+      ...(typeof sessionRevision === "number" ? { sessionRevision } : {}),
       ...(sessionRow
         ? {
+            sessionRevision: sessionRow.sessionRevision,
             updatedAt: sessionRow.updatedAt ?? undefined,
             sessionId: sessionRow.sessionId,
             kind: sessionRow.kind,
@@ -176,6 +186,8 @@ function emitSessionsChanged(
             deliveryContext: sessionRow.deliveryContext,
             parentSessionKey: sessionRow.parentSessionKey,
             childSessions: sessionRow.childSessions,
+            agentId: sessionRow.agentId,
+            agentOverrideId: sessionRow.agentOverrideId,
             thinkingLevel: sessionRow.thinkingLevel,
             fastMode: sessionRow.fastMode,
             verboseLevel: sessionRow.verboseLevel,
@@ -1301,8 +1313,11 @@ export const sessionsHandlers: GatewayRequestHandlers = {
       void triggerInternalHook(hookEvent);
     }
 
-    const parsed = parseAgentSessionKey(target.canonicalKey ?? key);
-    const agentId = normalizeAgentId(parsed?.agentId ?? resolveDefaultAgentId(cfg));
+    const agentId = resolveSessionAgentId({
+      sessionKey: target.canonicalKey ?? key,
+      config: cfg,
+      sessionEntry: applied.entry,
+    });
     const resolved = resolveSessionModelRef(cfg, applied.entry, agentId);
     const result: SessionsPatchResult = {
       ok: true,
@@ -1310,6 +1325,7 @@ export const sessionsHandlers: GatewayRequestHandlers = {
       key: target.canonicalKey,
       entry: applied.entry,
       resolved: {
+        agentId,
         modelProvider: resolved.provider,
         model: resolved.model,
       },

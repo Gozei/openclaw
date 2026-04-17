@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   deleteSessionsAndRefresh,
   loadSessions,
+  patchSession,
   subscribeSessions,
   type SessionsState,
 } from "./sessions.ts";
@@ -216,5 +217,31 @@ describe("loadSessions", () => {
     expect(
       state.sessionsCheckpointItemsByKey["agent:main:main"]?.map((item) => item.checkpointId),
     ).toEqual(["checkpoint-new"]);
+  });
+});
+
+describe("patchSession", () => {
+  it("sends agent overrides through sessions.patch and reloads sessions", async () => {
+    const request = vi.fn(async (method: string) => {
+      if (method === "sessions.patch") {
+        return { ok: true };
+      }
+      if (method === "sessions.list") {
+        return undefined;
+      }
+      throw new Error(`unexpected method: ${method}`);
+    });
+    const state = createState(request);
+
+    await patchSession(state, "main", { agentId: "ops" });
+
+    expect(request).toHaveBeenNthCalledWith(1, "sessions.patch", {
+      key: "main",
+      agentId: "ops",
+    });
+    expect(request).toHaveBeenNthCalledWith(2, "sessions.list", {
+      includeGlobal: true,
+      includeUnknown: true,
+    });
   });
 });

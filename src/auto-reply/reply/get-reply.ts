@@ -170,6 +170,7 @@ export async function getReplyFromConfig(
   const agentId = resolveSessionAgentId({
     sessionKey: agentSessionKey,
     config: cfg,
+    sessionEntry: opts?.sessionEntry,
   });
   const mergedSkillFilter = mergeSkillFilters(
     opts?.skillFilter,

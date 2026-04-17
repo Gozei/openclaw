@@ -14,7 +14,6 @@ import { agentCommandFromIngress } from "../../commands/agent.js";
 import { loadConfig } from "../../config/config.js";
 import {
   mergeSessionEntry,
-  resolveAgentIdFromSessionKey,
   resolveExplicitAgentSessionKey,
   resolveAgentMainSessionKey,
   type SessionEntry,
@@ -62,6 +61,7 @@ import {
   validateAgentParams,
   validateAgentWaitParams,
 } from "../protocol/index.js";
+import { nextSessionEventRevision } from "../session-event-revision.js";
 import { performGatewaySessionReset } from "../session-reset-service.js";
 import { reactivateCompletedSubagentSession } from "../session-subagent-reactivation.js";
 import {
@@ -70,6 +70,7 @@ import {
   loadSessionEntry,
   migrateAndPruneGatewaySessionStoreKey,
   resolveGatewayModelSupportsImages,
+  resolveLoadedSessionAgentId,
   resolveSessionModelRef,
 } from "../session-utils.js";
 import { formatForLog } from "../ws-log.js";
@@ -134,14 +135,19 @@ function emitSessionsChanged(
   if (connIds.size === 0) {
     return;
   }
+  const sessionRevision = payload.sessionKey
+    ? nextSessionEventRevision(payload.sessionKey)
+    : undefined;
   const sessionRow = payload.sessionKey ? loadGatewaySessionRow(payload.sessionKey) : null;
   context.broadcastToConnIds(
     "sessions.changed",
     {
       ...payload,
       ts: Date.now(),
+      ...(typeof sessionRevision === "number" ? { sessionRevision } : {}),
       ...(sessionRow
         ? {
+            sessionRevision: sessionRow.sessionRevision,
             updatedAt: sessionRow.updatedAt ?? undefined,
             sessionId: sessionRow.sessionId,
             kind: sessionRow.kind,
@@ -378,8 +384,17 @@ export const agentHandlers: GatewayRequestHandlers = {
       let baseProvider: string | undefined;
       let baseModel: string | undefined;
       if (requestedSessionKeyRaw) {
-        const { cfg: sessCfg, entry: sessEntry } = loadSessionEntry(requestedSessionKeyRaw);
-        const modelRef = resolveSessionModelRef(sessCfg, sessEntry, undefined);
+        const {
+          cfg: sessCfg,
+          entry: sessEntry,
+          canonicalKey,
+        } = loadSessionEntry(requestedSessionKeyRaw);
+        const sessionAgentId = resolveLoadedSessionAgentId({
+          sessionKey: canonicalKey ?? requestedSessionKeyRaw,
+          cfg: sessCfg,
+          entry: sessEntry,
+        });
+        const modelRef = resolveSessionModelRef(sessCfg, sessEntry, sessionAgentId);
         baseProvider = modelRef.provider;
         baseModel = modelRef.model;
       }
@@ -477,20 +492,6 @@ export const agentHandlers: GatewayRequestHandlers = {
         cfg,
         agentId,
       });
-    if (agentId && requestedSessionKeyRaw) {
-      const sessionAgentId = resolveAgentIdFromSessionKey(requestedSessionKeyRaw);
-      if (sessionAgentId !== agentId) {
-        respond(
-          false,
-          undefined,
-          errorShape(
-            ErrorCodes.INVALID_REQUEST,
-            `invalid agent params: agent "${request.agentId}" does not match session key agent "${sessionAgentId}"`,
-          ),
-        );
-        return;
-      }
-    }
     let resolvedSessionId = normalizeOptionalString(request.sessionId);
     let sessionEntry: SessionEntry | undefined;
     let bestEffortDeliver = requestedBestEffortDeliver ?? false;
@@ -551,7 +552,22 @@ export const agentHandlers: GatewayRequestHandlers = {
       const now = Date.now();
       const sessionId = entry?.sessionId ?? randomUUID();
       const labelValue = normalizeOptionalString(request.label) || entry?.label;
-      const sessionAgent = resolveAgentIdFromSessionKey(canonicalKey);
+      const sessionAgent = resolveLoadedSessionAgentId({
+        sessionKey: canonicalKey,
+        cfg,
+        entry,
+      });
+      if (agentId && sessionAgent !== agentId) {
+        respond(
+          false,
+          undefined,
+          errorShape(
+            ErrorCodes.INVALID_REQUEST,
+            `invalid agent params: agent "${request.agentId}" does not match session key agent "${sessionAgent}"`,
+          ),
+        );
+        return;
+      }
       spawnedByValue = canonicalizeSpawnedByForAgent(cfg, sessionAgent, entry?.spawnedBy);
       let inheritedGroup:
         | { groupId?: string; groupChannel?: string; groupSpace?: string }
@@ -640,8 +656,12 @@ export const agentHandlers: GatewayRequestHandlers = {
       resolvedSessionId = sessionId;
       const canonicalSessionKey = canonicalKey;
       resolvedSessionKey = canonicalSessionKey;
-      const agentId = resolveAgentIdFromSessionKey(canonicalSessionKey);
-      const mainSessionKey = resolveAgentMainSessionKey({ cfg, agentId });
+      const effectiveAgentId = resolveLoadedSessionAgentId({
+        sessionKey: canonicalSessionKey,
+        cfg,
+        entry: sessionEntry,
+      });
+      const mainSessionKey = resolveAgentMainSessionKey({ cfg, agentId: effectiveAgentId });
       if (storePath) {
         const persisted = await updateSessionStore(storePath, (store) => {
           const { primaryKey } = migrateAndPruneGatewaySessionStoreKey({
@@ -826,7 +846,11 @@ export const agentHandlers: GatewayRequestHandlers = {
     }
 
     if (shouldPrependStartupContext && resolvedSessionKey) {
-      const sessionAgentId = resolveAgentIdFromSessionKey(resolvedSessionKey);
+      const sessionAgentId = resolveLoadedSessionAgentId({
+        sessionKey: resolvedSessionKey,
+        cfg: cfgForAgent ?? cfg,
+        entry: sessionEntry,
+      });
       const runtimeWorkspaceDir =
         resolveIngressWorkspaceOverrideForSpawnedRun({
           spawnedBy: spawnedByValue,
@@ -913,6 +937,7 @@ export const agentHandlers: GatewayRequestHandlers = {
     const agentIdRaw = normalizeOptionalString(p.agentId) ?? "";
     const sessionKeyRaw = normalizeOptionalString(p.sessionKey) ?? "";
     let agentId = agentIdRaw ? normalizeAgentId(agentIdRaw) : undefined;
+    let cfg = loadConfig();
     if (sessionKeyRaw) {
       if (classifySessionKeyShape(sessionKeyRaw) === "malformed_agent") {
         respond(
@@ -925,7 +950,13 @@ export const agentHandlers: GatewayRequestHandlers = {
         );
         return;
       }
-      const resolved = resolveAgentIdFromSessionKey(sessionKeyRaw);
+      const loaded = loadSessionEntry(sessionKeyRaw);
+      cfg = loaded.cfg;
+      const resolved = resolveLoadedSessionAgentId({
+        sessionKey: loaded.canonicalKey ?? sessionKeyRaw,
+        cfg,
+        entry: loaded.entry,
+      });
       if (agentId && resolved !== agentId) {
         respond(
           false,
@@ -939,7 +970,6 @@ export const agentHandlers: GatewayRequestHandlers = {
       }
       agentId = resolved;
     }
-    const cfg = loadConfig();
     const identity = resolveAssistantIdentity({ cfg, agentId });
     const avatarValue =
       resolveAssistantAvatarUrl({

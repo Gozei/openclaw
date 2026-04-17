@@ -172,6 +172,12 @@ export type SessionEntry = {
   execAsk?: string;
   execNode?: string;
   responseUsage?: "on" | "off" | "tokens" | "full";
+  /**
+   * Session-scoped agent override used for subsequent turns without changing the
+   * persisted session/store key. This lets control surfaces switch the active
+   * agent immediately while existing runs keep their original snapshot.
+   */
+  agentOverrideId?: string;
   providerOverride?: string;
   modelOverride?: string;
   /**

@@ -527,6 +527,25 @@ describe("connectGateway", () => {
     expect(loadChatHistoryMock).not.toHaveBeenCalled();
   });
 
+  it("does not reload chat history again for a final assistant payload without tool output", () => {
+    const { client } = connectHostGateway();
+
+    client.emitEvent({
+      event: "chat",
+      payload: {
+        runId: "engine-run-no-tools",
+        sessionKey: "main",
+        state: "final",
+        message: {
+          role: "assistant",
+          content: [{ type: "text", text: "Done" }],
+        },
+      },
+    });
+
+    expect(loadChatHistoryMock).not.toHaveBeenCalled();
+  });
+
   it("stores BTW side results for the active session", () => {
     const { host, client } = connectHostGateway();
 

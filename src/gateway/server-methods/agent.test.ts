@@ -9,6 +9,24 @@ import type { GatewayRequestContext } from "./types.js";
 
 const ORIGINAL_STATE_DIR = process.env.OPENCLAW_STATE_DIR;
 
+function resolveSessionAgentIdForTest(params: {
+  sessionKey?: string;
+  agentId?: string;
+  sessionEntry?: { agentOverrideId?: string };
+}): string {
+  if (typeof params.agentId === "string" && params.agentId.trim()) {
+    return params.agentId;
+  }
+  if (
+    typeof params.sessionEntry?.agentOverrideId === "string" &&
+    params.sessionEntry.agentOverrideId.trim()
+  ) {
+    return params.sessionEntry.agentOverrideId.trim();
+  }
+  const match = params.sessionKey?.match(/^agent:([^:]+)/i);
+  return match?.[1] ?? "main";
+}
+
 const mocks = vi.hoisted(() => ({
   loadSessionEntry: vi.fn(),
   loadGatewaySessionRow: vi.fn(),
@@ -63,11 +81,18 @@ vi.mock("../../config/config.js", async () => {
   };
 });
 
-vi.mock("../../agents/agent-scope.js", () => ({
-  listAgentIds: () => ["main"],
-  resolveAgentWorkspaceDir: (cfg: { agents?: { defaults?: { workspace?: string } } }) =>
-    cfg?.agents?.defaults?.workspace ?? "/tmp/workspace",
-}));
+vi.mock("../../agents/agent-scope.js", async () => {
+  const actual = await vi.importActual<typeof import("../../agents/agent-scope.js")>(
+    "../../agents/agent-scope.js",
+  );
+  return {
+    ...actual,
+    listAgentIds: () => ["main", "ops"],
+    resolveAgentWorkspaceDir: (cfg: { agents?: { defaults?: { workspace?: string } } }) =>
+      cfg?.agents?.defaults?.workspace ?? "/tmp/workspace",
+    resolveSessionAgentId: resolveSessionAgentIdForTest,
+  };
+});
 
 vi.mock("../../infra/agent-events.js", () => ({
   registerAgentRunContext: mocks.registerAgentRunContext,
@@ -1190,6 +1215,34 @@ describe("gateway agent handler", () => {
       expect.objectContaining({
         message: expect.stringContaining("malformed session key"),
       }),
+    );
+  });
+
+  it("uses the effective session override in agent.identity.get", async () => {
+    mocks.loadSessionEntry.mockReturnValueOnce({
+      cfg: {},
+      storePath: "/tmp/sessions.json",
+      entry: {
+        sessionId: "session-override",
+        updatedAt: Date.now(),
+        agentOverrideId: "ops",
+      },
+      canonicalKey: "agent:main:main",
+    });
+
+    const respond = await invokeAgentIdentityGet(
+      {
+        sessionKey: "agent:main:main",
+      },
+      { reqId: "6" },
+    );
+
+    expect(respond).toHaveBeenCalledWith(
+      true,
+      expect.objectContaining({
+        agentId: "ops",
+      }),
+      undefined,
     );
   });
 });

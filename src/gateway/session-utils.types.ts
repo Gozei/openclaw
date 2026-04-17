@@ -17,6 +17,9 @@ export type SessionRunStatus = "running" | "done" | "failed" | "killed" | "timeo
 
 export type GatewaySessionRow = {
   key: string;
+  agentId?: string;
+  agentOverrideId?: string;
+  sessionRevision?: number;
   spawnedBy?: string;
   spawnedWorkspaceDir?: string;
   forkedFromParent?: boolean;
@@ -92,6 +95,7 @@ export type SessionsListResult = SessionsListResultBase<GatewaySessionsDefaults,
 export type SessionsPatchResult = SessionsPatchResultBase<SessionEntry> & {
   entry: SessionEntry;
   resolved?: {
+    agentId?: string;
     modelProvider?: string;
     model?: string;
   };

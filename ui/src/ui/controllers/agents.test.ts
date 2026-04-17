@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import { loadAgents, loadToolsCatalog, loadToolsEffective, saveAgentsConfig } from "./agents.ts";
+import {
+  loadAgents,
+  loadToolsCatalog,
+  loadToolsEffective,
+  refreshVisibleToolsEffectiveForCurrentSession,
+  saveAgentsConfig,
+} from "./agents.ts";
 import type { AgentsConfigSaveState, AgentsState } from "./agents.ts";
 
 function createState(): { state: AgentsState; request: ReturnType<typeof vi.fn> } {
@@ -301,6 +307,42 @@ describe("loadToolsEffective", () => {
     await loadToolsEffective(state, { agentId: "main", sessionKey: "main" });
 
     expect(state.toolsEffectiveResultKey).toBe("main:main:model=deepseek/deepseek-chat");
+  });
+
+  it("uses the effective session agent from sessions.list rows", async () => {
+    const { state, request } = createState();
+    state.agentsPanel = "tools";
+    state.agentsSelectedId = "ops";
+    state.sessionKey = "agent:main:main";
+    state.sessionsResult = {
+      ts: 0,
+      path: "",
+      count: 1,
+      defaults: { modelProvider: "openai", model: "gpt-5", contextTokens: null },
+      sessions: [
+        {
+          key: "agent:main:main",
+          kind: "direct",
+          updatedAt: 0,
+          agentId: "ops",
+          agentOverrideId: "ops",
+          model: "gpt-5-mini",
+          modelProvider: "openai",
+        },
+      ],
+    };
+    request.mockResolvedValue({
+      agentId: "ops",
+      profile: "coding",
+      groups: [],
+    });
+
+    await refreshVisibleToolsEffectiveForCurrentSession(state);
+
+    expect(request).toHaveBeenCalledWith("tools.effective", {
+      agentId: "ops",
+      sessionKey: "agent:main:main",
+    });
   });
 
   it("preserves already-qualified session models when the active session provider is stale and the catalog is empty", async () => {

@@ -81,6 +81,11 @@ const coreEntrySpecs: readonly CommandGroupDescriptorSpec<
         loadModule: () => import("./register.maintenance.js"),
         exportName: "registerMaintenanceCommands",
       },
+      {
+        commandNames: ["evolve", "evolution"],
+        loadModule: () => import("../evolution-cli.js"),
+        exportName: "registerEvolutionCli",
+      },
     ]),
   ),
   defineImportedCommandGroupSpec(

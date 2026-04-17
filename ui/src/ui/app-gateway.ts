@@ -16,6 +16,7 @@ import {
 } from "./app-settings.ts";
 import { handleAgentEvent, resetToolStream, type AgentEventPayload } from "./app-tool-stream.ts";
 import { shouldReloadHistoryForFinalEvent } from "./chat-event-reload.ts";
+import { extractText } from "./chat/message-extract.ts";
 import { parseChatSideResult, type ChatSideResult } from "./chat/side-result.ts";
 import { formatConnectError } from "./connect-error.ts";
 import { loadAgents, type AgentsState } from "./controllers/agents.ts";
@@ -52,8 +53,10 @@ import type { Tab } from "./navigation.ts";
 import type { UiSettings } from "./storage.ts";
 import type {
   AgentsListResult,
+  GatewaySessionRow,
   PresenceEntry,
   HealthSummary,
+  SessionsListResult,
   StatusSummary,
   UpdateAvailable,
 } from "./types.ts";
@@ -114,10 +117,342 @@ type GatewayHostWithSideResults = GatewayHost & {
   chatSideResultTerminalRuns?: Set<string>;
 };
 
+type GatewayHostWithTranscriptState = GatewayHost & {
+  chatMessages?: unknown[];
+  chatSending?: boolean;
+  chatStream?: string | null;
+  toolStreamOrder?: string[];
+};
+
+type SessionMessageGatewayPayload = {
+  sessionKey?: string;
+  message?: unknown;
+  messageId?: string;
+  messageSeq?: number;
+  sessionRevision?: number;
+  session?: GatewaySessionRow;
+};
+
+type SessionsChangedGatewayPayload = Partial<GatewaySessionRow> & {
+  sessionKey?: string;
+  session?: GatewaySessionRow | null;
+  sessionRevision?: number;
+};
+
+type GatewayHostWithSessionsState = GatewayHost & {
+  sessionsResult?: SessionsListResult | null;
+};
+
+type GatewayHostWithSessionRevisionState = GatewayHost & {
+  sessionEventRevisions?: Map<string, number>;
+};
+
+const SILENT_REPLY_PATTERN = /^\s*NO_REPLY\s*$/;
+const SYNTHETIC_TRANSCRIPT_REPAIR_RESULT =
+  "[openclaw] missing tool result in session history; inserted synthetic error result for transcript repair.";
+const SESSION_SNAPSHOT_FIELDS = [
+  "agentId",
+  "agentOverrideId",
+  "sessionRevision",
+  "spawnedBy",
+  "kind",
+  "label",
+  "displayName",
+  "surface",
+  "subject",
+  "room",
+  "space",
+  "updatedAt",
+  "sessionId",
+  "systemSent",
+  "abortedLastRun",
+  "thinkingLevel",
+  "fastMode",
+  "verboseLevel",
+  "reasoningLevel",
+  "elevatedLevel",
+  "inputTokens",
+  "outputTokens",
+  "totalTokens",
+  "totalTokensFresh",
+  "status",
+  "startedAt",
+  "endedAt",
+  "runtimeMs",
+  "childSessions",
+  "model",
+  "modelProvider",
+  "contextTokens",
+  "compactionCheckpointCount",
+  "latestCompactionCheckpoint",
+] as const satisfies readonly (keyof GatewaySessionRow)[];
+
 function isTerminalChatState(
   state: ChatEventPayload["state"] | ReturnType<typeof handleChatEvent> | null | undefined,
 ): state is "final" | "aborted" | "error" {
   return state === "final" || state === "aborted" || state === "error";
+}
+
+function normalizeGatewayMessageRole(message: unknown): string {
+  if (!message || typeof message !== "object") {
+    return "";
+  }
+  const role = (message as { role?: unknown }).role;
+  return typeof role === "string" ? role.trim().toLowerCase() : "";
+}
+
+function extractComparableMessageText(message: unknown): string {
+  const text = extractText(message);
+  return typeof text === "string" ? text.replace(/\s+/g, " ").trim() : "";
+}
+
+function readGatewayTranscriptMarker(message: unknown): {
+  id?: string;
+  seq?: number;
+} {
+  if (!message || typeof message !== "object" || Array.isArray(message)) {
+    return {};
+  }
+  const marker = (message as { __openclaw?: unknown }).__openclaw;
+  if (!marker || typeof marker !== "object" || Array.isArray(marker)) {
+    return {};
+  }
+  const record = marker as { id?: unknown; seq?: unknown };
+  return {
+    ...(typeof record.id === "string" && record.id.trim() ? { id: record.id.trim() } : {}),
+    ...(typeof record.seq === "number" ? { seq: record.seq } : {}),
+  };
+}
+
+function attachGatewayTranscriptMarker(
+  message: unknown,
+  marker: { id?: string; seq?: number },
+): unknown {
+  if (!message || typeof message !== "object" || Array.isArray(message)) {
+    return message;
+  }
+  if (marker.id === undefined && marker.seq === undefined) {
+    return message;
+  }
+  const record = message as Record<string, unknown>;
+  const existing =
+    record.__openclaw && typeof record.__openclaw === "object" && !Array.isArray(record.__openclaw)
+      ? (record.__openclaw as Record<string, unknown>)
+      : {};
+  return {
+    ...record,
+    __openclaw: {
+      ...existing,
+      ...(marker.id !== undefined ? { id: marker.id } : {}),
+      ...(marker.seq !== undefined ? { seq: marker.seq } : {}),
+    },
+  };
+}
+
+function shouldHideGatewayTranscriptMessage(message: unknown): boolean {
+  const role = normalizeGatewayMessageRole(message);
+  const text = extractComparableMessageText(message);
+  return (
+    (role === "assistant" && SILENT_REPLY_PATTERN.test(text)) ||
+    (role === "toolresult" && text === SYNTHETIC_TRANSCRIPT_REPAIR_RESULT)
+  );
+}
+
+function applySessionSnapshotToLoadedSessions(
+  host: GatewayHost,
+  payload: SessionsChangedGatewayPayload | undefined,
+): boolean {
+  const sessionsHost = host as GatewayHostWithSessionsState;
+  const sessionsResult = sessionsHost.sessionsResult;
+  if (!sessionsResult || !Array.isArray(sessionsResult.sessions) || !payload) {
+    return false;
+  }
+  const fullRow =
+    payload.session &&
+    typeof payload.session === "object" &&
+    typeof payload.session.key === "string"
+      ? payload.session
+      : null;
+  const sessionKey =
+    fullRow?.key ??
+    (typeof payload.sessionKey === "string" && payload.sessionKey.trim()
+      ? payload.sessionKey.trim()
+      : "");
+  if (!sessionKey) {
+    return false;
+  }
+  const index = sessionsResult.sessions.findIndex((row) => row.key === sessionKey);
+  if (index < 0) {
+    return false;
+  }
+  const previous = sessionsResult.sessions[index];
+  let nextRow = fullRow ?? previous;
+  if (!fullRow) {
+    for (const field of SESSION_SNAPSHOT_FIELDS) {
+      if (!Object.prototype.hasOwnProperty.call(payload, field)) {
+        continue;
+      }
+      const nextValue = payload[field];
+      if (nextValue === previous[field]) {
+        continue;
+      }
+      if (nextRow === previous) {
+        nextRow = { ...previous };
+      }
+      (nextRow as Record<string, unknown>)[field] = nextValue as unknown;
+    }
+  }
+  if (nextRow === previous) {
+    return true;
+  }
+  const nextSessions = [...sessionsResult.sessions];
+  nextSessions[index] = nextRow;
+  sessionsHost.sessionsResult = {
+    ...sessionsResult,
+    sessions: nextSessions,
+  };
+  return true;
+}
+
+function resolvePayloadSessionRevision(
+  payload:
+    | SessionMessageGatewayPayload
+    | SessionsChangedGatewayPayload
+    | { session?: GatewaySessionRow | null; sessionRevision?: number }
+    | undefined,
+): number | undefined {
+  if (typeof payload?.sessionRevision === "number") {
+    return payload.sessionRevision;
+  }
+  return typeof payload?.session?.sessionRevision === "number"
+    ? payload.session.sessionRevision
+    : undefined;
+}
+
+function readKnownSessionRevision(host: GatewayHost, sessionKey: string): number | undefined {
+  const revisionHost = host as GatewayHostWithSessionRevisionState;
+  const tracked = revisionHost.sessionEventRevisions?.get(sessionKey);
+  if (typeof tracked === "number") {
+    return tracked;
+  }
+  const sessionsHost = host as GatewayHostWithSessionsState;
+  const row = sessionsHost.sessionsResult?.sessions?.find((entry) => entry.key === sessionKey);
+  return typeof row?.sessionRevision === "number" ? row.sessionRevision : undefined;
+}
+
+function recordKnownSessionRevision(host: GatewayHost, sessionKey: string, revision: number): void {
+  const revisionHost = host as GatewayHostWithSessionRevisionState;
+  if (!revisionHost.sessionEventRevisions) {
+    revisionHost.sessionEventRevisions = new Map<string, number>();
+  }
+  revisionHost.sessionEventRevisions.set(sessionKey, revision);
+}
+
+function hasSessionRevisionGap(
+  host: GatewayHost,
+  sessionKey: string,
+  incomingRevision: number | undefined,
+): boolean {
+  if (typeof incomingRevision !== "number") {
+    return false;
+  }
+  const knownRevision = readKnownSessionRevision(host, sessionKey);
+  return typeof knownRevision === "number" && incomingRevision > knownRevision + 1;
+}
+
+function applyTranscriptMessageToActiveChat(
+  host: GatewayHost,
+  payload: SessionMessageGatewayPayload | undefined,
+): boolean {
+  const transcriptHost = host as GatewayHostWithTranscriptState;
+  if (!payload?.message || !Array.isArray(transcriptHost.chatMessages)) {
+    return false;
+  }
+  if (shouldHideGatewayTranscriptMessage(payload.message)) {
+    return true;
+  }
+  const incomingMarker = {
+    ...readGatewayTranscriptMarker(payload.message),
+    ...(typeof payload.messageId === "string" && payload.messageId.trim()
+      ? { id: payload.messageId.trim() }
+      : {}),
+    ...(typeof payload.messageSeq === "number" ? { seq: payload.messageSeq } : {}),
+  };
+  const nextMessage = attachGatewayTranscriptMarker(payload.message, incomingMarker);
+  const existingMessages = transcriptHost.chatMessages;
+  if (existingMessages.length === 0) {
+    if (incomingMarker.seq !== undefined && incomingMarker.seq > 1) {
+      return false;
+    }
+    transcriptHost.chatMessages = [nextMessage];
+    return true;
+  }
+  const lastMessage = existingMessages[existingMessages.length - 1];
+  const lastMarker = readGatewayTranscriptMarker(lastMessage);
+  const incomingRole = normalizeGatewayMessageRole(nextMessage);
+  const lastRole = normalizeGatewayMessageRole(lastMessage);
+  const incomingText = extractComparableMessageText(nextMessage);
+  const lastText = extractComparableMessageText(lastMessage);
+  const sameRenderableTail =
+    Boolean(incomingText || lastText) && incomingRole === lastRole && incomingText === lastText;
+  if (incomingMarker.id && lastMarker.id && incomingMarker.id === lastMarker.id) {
+    if (sameRenderableTail) {
+      return true;
+    }
+    transcriptHost.chatMessages = [...existingMessages.slice(0, -1), nextMessage];
+    return true;
+  }
+  if (incomingMarker.seq !== undefined) {
+    if (lastMarker.seq === undefined) {
+      return sameRenderableTail;
+    }
+    if (incomingMarker.seq === lastMarker.seq) {
+      if (sameRenderableTail) {
+        return true;
+      }
+      transcriptHost.chatMessages = [...existingMessages.slice(0, -1), nextMessage];
+      return true;
+    }
+    if (incomingMarker.seq !== lastMarker.seq + 1) {
+      return false;
+    }
+    transcriptHost.chatMessages = [...existingMessages, nextMessage];
+    return true;
+  }
+  if (sameRenderableTail) {
+    return true;
+  }
+  return false;
+}
+
+function shouldSuppressTranscriptReloadForActiveChat(
+  host: GatewayHost,
+  payload: SessionMessageGatewayPayload | undefined,
+): boolean {
+  const transcriptHost = host as GatewayHostWithTranscriptState;
+  const hasLiveRun =
+    host.chatRunId != null ||
+    transcriptHost.chatSending === true ||
+    transcriptHost.chatStream != null ||
+    (Array.isArray(transcriptHost.toolStreamOrder) && transcriptHost.toolStreamOrder.length > 0);
+  if (hasLiveRun) {
+    return true;
+  }
+  if (!payload?.message || !Array.isArray(transcriptHost.chatMessages)) {
+    return false;
+  }
+  const lastMessage = transcriptHost.chatMessages[transcriptHost.chatMessages.length - 1];
+  if (lastMessage === undefined) {
+    return false;
+  }
+  const incomingRole = normalizeGatewayMessageRole(payload.message);
+  const lastRole = normalizeGatewayMessageRole(lastMessage);
+  if (!incomingRole || incomingRole !== lastRole) {
+    return false;
+  }
+  const incomingText = extractComparableMessageText(payload.message);
+  const lastText = extractComparableMessageText(lastMessage);
+  return Boolean(incomingText || lastText) && incomingText === lastText;
 }
 
 type ConnectGatewayOptions = {
@@ -416,10 +751,26 @@ function handleChatGatewayEvent(host: GatewayHost, payload: ChatEventPayload | u
 
 function handleSessionMessageGatewayEvent(
   host: GatewayHost,
-  payload: { sessionKey?: string } | undefined,
+  payload: SessionMessageGatewayPayload | undefined,
 ) {
   const sessionKey = payload?.sessionKey?.trim();
+  const sessionRevision = resolvePayloadSessionRevision(payload);
+  const revisionGap = sessionKey ? hasSessionRevisionGap(host, sessionKey, sessionRevision) : false;
+  applySessionSnapshotToLoadedSessions(host, payload);
+  if (sessionKey && typeof sessionRevision === "number") {
+    recordKnownSessionRevision(host, sessionKey, sessionRevision);
+  }
   if (!sessionKey || sessionKey !== host.sessionKey) {
+    return;
+  }
+  if (revisionGap) {
+    void loadChatHistory(host as unknown as ChatState);
+    return;
+  }
+  if (shouldSuppressTranscriptReloadForActiveChat(host, payload)) {
+    return;
+  }
+  if (applyTranscriptMessageToActiveChat(host, payload)) {
     return;
   }
   void loadChatHistory(host as unknown as ChatState);
@@ -462,7 +813,7 @@ function handleGatewayEventUnsafe(host: GatewayHost, evt: GatewayEventFrame) {
   }
 
   if (evt.event === "session.message") {
-    handleSessionMessageGatewayEvent(host, evt.payload as { sessionKey?: string } | undefined);
+    handleSessionMessageGatewayEvent(host, evt.payload as SessionMessageGatewayPayload | undefined);
     return;
   }
 
@@ -493,7 +844,21 @@ function handleGatewayEventUnsafe(host: GatewayHost, evt: GatewayEventFrame) {
   }
 
   if (evt.event === "sessions.changed") {
-    void loadSessions(host as unknown as SessionsState);
+    const payload = evt.payload as SessionsChangedGatewayPayload | undefined;
+    const sessionKey = payload?.sessionKey?.trim();
+    const sessionRevision = resolvePayloadSessionRevision(payload);
+    const revisionGap = sessionKey
+      ? hasSessionRevisionGap(host, sessionKey, sessionRevision)
+      : false;
+    if (!applySessionSnapshotToLoadedSessions(host, payload)) {
+      void loadSessions(host as unknown as SessionsState);
+    }
+    if (sessionKey && typeof sessionRevision === "number") {
+      recordKnownSessionRevision(host, sessionKey, sessionRevision);
+      if (revisionGap && sessionKey === host.sessionKey) {
+        void loadChatHistory(host as unknown as ChatState);
+      }
+    }
     return;
   }
 
