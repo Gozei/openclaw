@@ -1,57 +1,17 @@
-<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="deepclaw-bg" x1="18" y1="14" x2="110" y2="116" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#0B1830" />
-      <stop offset="1" stop-color="#132B52" />
-    </linearGradient>
-    <linearGradient id="deepclaw-mark" x1="34" y1="26" x2="98" y2="98" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#41C8FF" />
-      <stop offset="0.55" stop-color="#4F95FF" />
-      <stop offset="1" stop-color="#59E0CD" />
-    </linearGradient>
-    <radialGradient id="deepclaw-glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(88 36) rotate(132.614) scale(78.9471)">
-      <stop stop-color="#4FC8FF" stop-opacity="0.42" />
-      <stop offset="1" stop-color="#4FC8FF" stop-opacity="0" />
-    </radialGradient>
-  </defs>
-  <rect x="10" y="10" width="108" height="108" rx="30" fill="url(#deepclaw-bg)" />
-  <rect x="10" y="10" width="108" height="108" rx="30" fill="url(#deepclaw-glow)" />
-  <g opacity="0.16" fill="#9EDBFF">
-    <circle cx="36" cy="32" r="2.5" />
-    <circle cx="30" cy="48" r="2.5" />
-    <circle cx="38" cy="64" r="2.5" />
-    <circle cx="32" cy="82" r="2.5" />
-    <circle cx="91" cy="82" r="2.5" />
-    <circle cx="98" cy="64" r="2.5" />
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" version="1.1">
+  <g transform="translate(1024 0) scale(-1 1)">
+    <defs>
+      <linearGradient id="whaleGrad" x1="0.10" y1="0.30" x2="0.88" y2="0.72">
+        <stop offset="0%" stop-color="#4cc9f5"/>
+        <stop offset="55%" stop-color="#0b6aa8"/>
+        <stop offset="100%" stop-color="#062d69"/>
+      </linearGradient>
+    </defs>
+    <path d="M 116 347 L 116 359 L 125 385 L 145 423 L 167 456 L 214 512 L 272 564 L 318 596 L 364 621 L 409 639 L 461 652 L 507 695 L 548 721 L 591 738 L 632 746 L 681 745 L 691 741 L 696 730 L 693 723 L 672 706 L 641 672 L 630 649 L 630 638 L 674 627 L 725 608 L 772 583 L 832 543 L 842 540 L 905 542 L 946 529 L 967 515 L 988 493 L 1002 468 L 1009 442 L 1007 418 L 986 442 L 966 453 L 949 456 L 897 453 L 880 458 L 860 472 L 831 509 L 815 523 L 843 481 L 848 463 L 848 447 L 837 422 L 808 393 L 798 377 L 796 363 L 805 336 L 802 335 L 781 348 L 763 366 L 750 387 L 743 409 L 745 445 L 757 472 L 778 506 L 781 516 L 780 529 L 770 543 L 751 555 L 721 562 L 692 562 L 646 551 L 600 529 L 559 500 L 483 430 L 450 404 L 402 374 L 344 348 L 272 328 L 189 320 L 156 322 L 136 327 L 126 333 Z" fill="url(#whaleGrad)"/>
+    <path d="M 131 361 L 152 407 L 182 453 L 217 495 L 256 533 L 307 573 L 346 597 L 393 619 L 447 635 L 440 627 L 401 613 L 354 589 L 317 565 L 290 544 L 249 504 L 216 462 L 180 401 L 163 361 L 158 359 L 136 359 Z" fill="#ffffff"/>
+    <path d="M 180 363 L 200 407 L 224 447 L 258 492 L 286 521 L 313 544 L 347 568 L 386 590 L 424 606 L 407 580 L 380 567 L 345 544 L 318 522 L 287 491 L 264 463 L 242 430 L 213 371 Z" fill="#ffffff"/>
+    <path d="M 234 380 L 261 432 L 299 482 L 316 500 L 347 527 L 386 553 L 361 511 L 314 465 L 292 437 L 274 407 L 260 394 Z" fill="#ffffff"/>
+    <path d="M 349 423 L 343 432 L 343 442 L 346 449 L 357 456 L 368 457 L 375 455 L 358 451 L 351 441 L 354 435 L 362 440 L 368 439 L 372 434 L 371 425 L 361 419 Z" fill="#ffffff"/>
   </g>
-  <path
-    d="M48 32V96"
-    stroke="url(#deepclaw-mark)"
-    stroke-width="12"
-    stroke-linecap="round"
-  />
-  <circle cx="48" cy="44" r="4.5" fill="#DFF8FF" />
-  <circle cx="48" cy="64" r="4.5" fill="#DFF8FF" />
-  <circle cx="48" cy="84" r="4.5" fill="#DFF8FF" />
-  <path
-    d="M50 32C73 32 89 45 89 64C89 83 73 96 50 96"
-    stroke="url(#deepclaw-mark)"
-    stroke-width="12"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-  />
-  <path
-    d="M82 48L98 38"
-    stroke="url(#deepclaw-mark)"
-    stroke-width="11"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-  />
-  <path
-    d="M82 80L98 90"
-    stroke="url(#deepclaw-mark)"
-    stroke-width="11"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-  />
 </svg>
