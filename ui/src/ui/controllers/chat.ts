@@ -124,6 +124,28 @@ export type ChatEventPayload = {
   errorMessage?: string;
 };
 
+type ChatStateWithStreamSegments = ChatState & {
+  chatStreamSegments?: Array<{ text: string; ts: number }>;
+};
+
+function resolveVisibleStreamText(state: ChatState, next: string): string | null {
+  const segmentHost = state as ChatStateWithStreamSegments;
+  const segments = Array.isArray(segmentHost.chatStreamSegments)
+    ? segmentHost.chatStreamSegments
+    : [];
+  if (segments.length === 0) {
+    return next;
+  }
+  const committedPrefix = segments
+    .map((segment) => (typeof segment?.text === "string" ? segment.text : ""))
+    .join("");
+  if (!committedPrefix || !next.startsWith(committedPrefix)) {
+    return next;
+  }
+  const remainder = next.slice(committedPrefix.length);
+  return remainder.length > 0 ? remainder : null;
+}
+
 function maybeResetToolStream(state: ChatState) {
   const toolHost = state as ChatState & Partial<Parameters<typeof resetToolStream>[0]>;
   if (
@@ -427,7 +449,7 @@ export function handleChatEvent(state: ChatState, payload?: ChatEventPayload) {
   if (payload.state === "delta") {
     const next = extractText(payload.message);
     if (typeof next === "string" && !isSilentReplyStream(next)) {
-      state.chatStream = next;
+      state.chatStream = resolveVisibleStreamText(state, next);
     }
   } else if (payload.state === "final") {
     const finalMessage = normalizeFinalAssistantMessage(payload.message);

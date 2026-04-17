@@ -5,9 +5,9 @@
 /* Chat Group Layout - default (assistant/other on left) */
 .chat-group {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   align-items: flex-start;
-  margin-bottom: 20px;
+  margin-bottom: 18px;
   margin-left: 0;
   margin-right: 0;
 }
@@ -21,16 +21,16 @@
 .chat-group-messages {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   flex: 1 1 auto;
-  max-width: min(860px, calc(100% - 72px));
+  max-width: min(960px, calc(100% - 64px));
   align-items: flex-start;
 }
 
 /* User messages align content right */
 .chat-group.user .chat-group-messages {
   align-items: flex-end;
-  max-width: min(720px, 76%);
+  max-width: min(780px, 80%);
 }
 
 .chat-group.user .chat-group-footer {
@@ -40,58 +40,63 @@
 /* Footer at bottom of message group (role + time) */
 .chat-group-footer {
   display: flex;
-  gap: 8px;
-  align-items: baseline;
+  gap: 10px;
+  row-gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
   margin-top: 2px;
   padding-left: 2px;
+  min-width: 0;
 }
 
 .chat-sender-name {
   font-weight: 500;
   font-size: 12px;
-  color: var(--muted);
+  color: var(--muted-strong);
 }
 
 .chat-group-timestamp {
   font-size: 11px;
   color: var(--muted);
-  opacity: 0.7;
+  opacity: 0.85;
+  white-space: nowrap;
 }
 
 /* ── Group footer action buttons (TTS, delete) ── */
 .chat-group-footer button {
-  background: none;
-  border: none;
+  background: color-mix(in srgb, var(--bg-elevated) 94%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
   cursor: pointer;
-  padding: 4px;
-  min-width: 24px;
-  min-height: 24px;
-  border-radius: var(--radius-sm, 4px);
-  color: var(--muted);
-  opacity: 0;
-  pointer-events: none;
+  padding: 0;
+  min-width: 28px;
+  min-height: 28px;
+  border-radius: 10px;
+  color: var(--muted-strong);
+  opacity: 0.72;
+  pointer-events: auto;
   transition:
     opacity 120ms ease-out,
     color 120ms ease-out,
-    background 120ms ease-out;
+    background 120ms ease-out,
+    border-color 120ms ease-out;
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
 
 .chat-group:hover .chat-group-footer button {
-  opacity: 0.6;
-  pointer-events: auto;
+  opacity: 0.94;
 }
 
 .chat-group-footer button:hover {
   opacity: 1 !important;
-  background: var(--bg-hover, rgba(255, 255, 255, 0.08));
+  background: color-mix(in srgb, var(--bg-hover) 90%, transparent);
+  border-color: color-mix(in srgb, var(--border-hover) 64%, transparent);
 }
 
 .chat-group-footer button svg {
-  width: 14px;
-  height: 14px;
+  width: 15px;
+  height: 15px;
   fill: none;
   stroke: currentColor;
   stroke-width: 2;
@@ -190,9 +195,9 @@ img.chat-avatar {
   display: block;
   border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
   background: color-mix(in srgb, var(--card) 98%, transparent);
-  border-radius: 22px;
-  padding: 12px 16px;
-  box-shadow: var(--shadow-sm);
+  border-radius: 18px;
+  padding: 14px 16px;
+  box-shadow: none;
   transition:
     background var(--duration-fast) ease-out,
     border-color var(--duration-fast) ease-out,
@@ -308,7 +313,7 @@ img.chat-avatar {
 .chat-bubble:hover {
   background: color-mix(in srgb, var(--bg-hover) 46%, var(--card));
   border-color: color-mix(in srgb, var(--border-hover) 62%, transparent);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-sm);
 }
 
 /* User bubbles have different styling */
@@ -367,12 +372,13 @@ img.chat-avatar {
 .msg-meta {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   font-size: 11px;
   line-height: 1;
   color: var(--muted);
-  margin-top: 4px;
+  margin-top: 0;
   flex-wrap: wrap;
+  min-width: 0;
 }
 
 .msg-meta__tokens,
@@ -384,13 +390,15 @@ img.chat-avatar {
   align-items: center;
   gap: 2px;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .msg-meta__model {
-  background: color-mix(in srgb, var(--bg-hover) 82%, transparent);
-  padding: 2px 8px;
-  border-radius: var(--radius-sm, 4px);
-  font-family: var(--font-mono, monospace);
+  background: color-mix(in srgb, var(--bg-hover) 78%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  font-family: var(--mono);
 }
 
 .msg-meta__cost {

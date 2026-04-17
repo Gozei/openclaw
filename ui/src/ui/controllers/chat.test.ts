@@ -163,6 +163,55 @@ describe("handleChatEvent", () => {
     expect(state.chatStream).toBe("Alpha");
   });
 
+  it("strips already-rendered stream segments from cumulative deltas after tool starts", () => {
+    const state = createState({
+      sessionKey: "main",
+      chatRunId: "run-1",
+      chatStream: null,
+      chatStreamStartedAt: null,
+    }) as ChatState & {
+      chatStreamSegments: Array<{ text: string; ts: number }>;
+    };
+    state.chatStreamSegments = [{ text: "Before tool call", ts: 100 }];
+
+    const payload: ChatEventPayload = {
+      runId: "run-1",
+      sessionKey: "main",
+      state: "delta",
+      message: {
+        role: "assistant",
+        content: [{ type: "text", text: "Before tool call\n\nAfter tool call" }],
+      },
+    };
+
+    expect(handleChatEvent(state, payload)).toBe("delta");
+    expect(state.chatStream).toBe("\n\nAfter tool call");
+  });
+
+  it("keeps cumulative deltas intact when committed stream segments are not a prefix", () => {
+    const state = createState({
+      sessionKey: "main",
+      chatRunId: "run-1",
+      chatStream: null,
+    }) as ChatState & {
+      chatStreamSegments: Array<{ text: string; ts: number }>;
+    };
+    state.chatStreamSegments = [{ text: "Different prefix", ts: 100 }];
+
+    const payload: ChatEventPayload = {
+      runId: "run-1",
+      sessionKey: "main",
+      state: "delta",
+      message: {
+        role: "assistant",
+        content: [{ type: "text", text: "Fresh answer" }],
+      },
+    };
+
+    expect(handleChatEvent(state, payload)).toBe("delta");
+    expect(state.chatStream).toBe("Fresh answer");
+  });
+
   it("returns final for another run when payload has no message", () => {
     const state = createActiveStreamingState();
     const payload: ChatEventPayload = {
