@@ -29,7 +29,7 @@ export class DashboardHeader extends LitElement {
             <img class="dashboard-header__brand-logo" src=${logoUrl} alt=${BRAND_NAME} />
             <span>${BRAND_NAME}</span>
           </span>
-          <span class="dashboard-header__breadcrumb-sep">›</span>
+          <span class="dashboard-header__breadcrumb-sep">/</span>
           <span class="dashboard-header__breadcrumb-current">${label}</span>
         </div>
         <div class="dashboard-header__actions">

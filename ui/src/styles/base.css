@@ -83,9 +83,9 @@
   --mono:
     "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace;
   --font-body:
-    "Google Sans Text", "Google Sans", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
-    Roboto, sans-serif;
-  --font-display: "Google Sans", var(--font-body);
+    "SF Pro Text", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI Variable",
+    "Segoe UI", sans-serif;
+  --font-display: "SF Pro Display", var(--font-body);
 
   /* Shadows - softer and more product-like */
   --shadow-sm: 0 1px 2px rgba(0, 8, 20, 0.24);
@@ -115,12 +115,12 @@
 
 /* Light theme tokens apply to every light-mode family. */
 :root[data-theme-mode="light"] {
-  --bg: #eef4fb;
-  --bg-accent: #e5edf8;
+  --bg: #f4f5f7;
+  --bg-accent: #eceef2;
   --bg-elevated: #ffffff;
-  --bg-hover: #dce7f5;
-  --bg-muted: #e8eff9;
-  --bg-content: #f3f8fd;
+  --bg-hover: #f0f2f5;
+  --bg-muted: #eef0f3;
+  --bg-content: #f8f9fb;
 
   --card: #ffffff;
   --card-foreground: #10213a;
@@ -128,63 +128,63 @@
   --popover: #ffffff;
   --popover-foreground: #10213a;
 
-  --panel: #eef4fb;
-  --panel-strong: #e3ebf7;
-  --panel-hover: #d8e4f5;
-  --chrome: rgba(238, 244, 251, 0.9);
-  --chrome-strong: rgba(238, 244, 251, 0.96);
+  --panel: #f1f3f6;
+  --panel-strong: #e9ecf1;
+  --panel-hover: #e5e8ee;
+  --chrome: rgba(248, 249, 251, 0.86);
+  --chrome-strong: rgba(248, 249, 251, 0.92);
 
-  --text: #2f4765;
-  --text-strong: #0f2239;
-  --chat-text: #14263d;
-  --muted: #5c728e;
-  --muted-strong: #365370;
-  --muted-foreground: #5c728e;
+  --text: #424650;
+  --text-strong: #151821;
+  --chat-text: #161922;
+  --muted: #707684;
+  --muted-strong: #49505d;
+  --muted-foreground: #707684;
 
-  --border: #c4d3e5;
-  --border-strong: #a8bbd2;
-  --border-hover: #839cbc;
-  --input: #c9d7e8;
+  --border: #dfe3ea;
+  --border-strong: #c9d0da;
+  --border-hover: #adb5c2;
+  --input: #d8dde5;
 
-  --ring: #0b84ff;
-  --accent: #0b84ff;
-  --accent-hover: #006fdd;
-  --accent-muted: #0b84ff;
-  --accent-subtle: rgba(11, 132, 255, 0.1);
+  --ring: #2563eb;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-muted: #2563eb;
+  --accent-subtle: rgba(37, 99, 235, 0.07);
   --accent-foreground: #ffffff;
-  --accent-glow: rgba(11, 132, 255, 0.14);
-  --primary: #0b84ff;
+  --accent-glow: rgba(37, 99, 235, 0.1);
+  --primary: #2563eb;
   --primary-foreground: #ffffff;
 
-  --secondary: #ecf2fb;
-  --secondary-foreground: #17283f;
-  --accent-2: #0fa7a0;
-  --accent-2-muted: rgba(15, 167, 160, 0.76);
-  --accent-2-subtle: rgba(15, 167, 160, 0.1);
+  --secondary: #f0f1f4;
+  --secondary-foreground: #1b1d22;
+  --accent-2: #9096a5;
+  --accent-2-muted: rgba(144, 150, 165, 0.76);
+  --accent-2-subtle: rgba(144, 150, 165, 0.1);
 
-  --ok: #0b8f65;
+  --ok: #198a63;
   --ok-muted: rgba(11, 143, 101, 0.76);
   --ok-subtle: rgba(11, 143, 101, 0.1);
   --destructive: #e25272;
   --destructive-foreground: #ffffff;
-  --warn: #a76500;
+  --warn: #9a6407;
   --warn-muted: rgba(167, 101, 0, 0.75);
   --warn-subtle: rgba(167, 101, 0, 0.1);
-  --danger: #e25272;
-  --danger-muted: rgba(226, 82, 114, 0.75);
-  --danger-subtle: rgba(226, 82, 114, 0.1);
-  --info: #0b84ff;
+  --danger: #d44e64;
+  --danger-muted: rgba(212, 78, 100, 0.75);
+  --danger-subtle: rgba(212, 78, 100, 0.1);
+  --info: #2563eb;
 
-  --focus: rgba(11, 132, 255, 0.12);
-  --focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px color-mix(in srgb, var(--ring) 76%, transparent);
+  --focus: rgba(37, 99, 235, 0.1);
+  --focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px color-mix(in srgb, var(--ring) 68%, transparent);
   --focus-glow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring), 0 0 10px var(--accent-glow);
 
-  --grid-line: rgba(11, 132, 255, 0.06);
+  --grid-line: rgba(17, 18, 22, 0.04);
 
-  --shadow-sm: 0 1px 2px rgba(19, 38, 61, 0.08);
-  --shadow-md: 0 1px 3px rgba(19, 38, 61, 0.12), 0 10px 24px rgba(19, 38, 61, 0.08);
-  --shadow-lg: 0 4px 12px rgba(19, 38, 61, 0.12), 0 20px 28px rgba(19, 38, 61, 0.08);
-  --shadow-xl: 0 10px 24px rgba(19, 38, 61, 0.14), 0 28px 42px rgba(19, 38, 61, 0.1);
+  --shadow-sm: 0 1px 2px rgba(17, 24, 39, 0.04);
+  --shadow-md: 0 8px 24px rgba(17, 24, 39, 0.06);
+  --shadow-lg: 0 16px 44px rgba(17, 24, 39, 0.08);
+  --shadow-xl: 0 20px 56px rgba(17, 24, 39, 0.1);
   --shadow-glow: 0 0 14px var(--accent-glow);
 
   color-scheme: light;

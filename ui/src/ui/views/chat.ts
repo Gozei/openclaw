@@ -1,4 +1,5 @@
 import { html, nothing, type TemplateResult } from "lit";
+import { guard } from "lit/directives/guard.js";
 import { ref } from "lit/directives/ref.js";
 import { repeat } from "lit/directives/repeat.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
@@ -126,6 +127,34 @@ const deletedMessagesMap = new Map<string, DeletedMessages>();
 const expandedToolCardsBySession = new Map<string, Map<string, boolean>>();
 const initializedToolCardsBySession = new Map<string, Set<string>>();
 const lastAutoExpandPrefBySession = new Map<string, boolean>();
+const chatItemsCacheBySession = new Map<string, ChatItemsCacheEntry>();
+const chatRenderRevisionBySession = new Map<string, number>();
+const normalizedChatMessageCache = new WeakMap<object, ReturnType<typeof normalizeMessage>>();
+const chatMessagePreviewCache = new WeakMap<
+  object,
+  {
+    preview: Extract<NonNullable<ToolCard["preview"]>, { kind: "canvas" }>;
+    text: string | null;
+    timestamp: number | null;
+  } | null
+>();
+
+type AssistantIndexEntry = {
+  index: number;
+  timestamp: number | null;
+};
+
+type ChatItemsCacheEntry = {
+  messagesRef: unknown[];
+  toolMessagesRef: unknown[];
+  streamSegmentsRef: Array<{ text: string; ts: number }>;
+  stream: string | null;
+  streamStartedAt: number | null;
+  showToolCalls: boolean;
+  searchOpen: boolean;
+  searchQuery: string;
+  items: Array<ChatItem | MessageGroup>;
+};
 
 function getInputHistory(sessionKey: string): InputHistory {
   return getOrCreateSessionCacheValue(inputHistories, sessionKey, () => new InputHistory());
@@ -153,6 +182,29 @@ function getExpandedToolCards(sessionKey: string): Map<string, boolean> {
 
 function getInitializedToolCards(sessionKey: string): Set<string> {
   return getOrCreateSessionCacheValue(initializedToolCardsBySession, sessionKey, () => new Set());
+}
+
+function getChatRenderRevision(sessionKey: string): number {
+  return chatRenderRevisionBySession.get(sessionKey) ?? 0;
+}
+
+function bumpChatRenderRevision(sessionKey: string): number {
+  const next = getChatRenderRevision(sessionKey) + 1;
+  chatRenderRevisionBySession.set(sessionKey, next);
+  return next;
+}
+
+function getCachedNormalizedChatMessage(message: unknown) {
+  if (!message || typeof message !== "object") {
+    return normalizeMessage(message);
+  }
+  const cached = normalizedChatMessageCache.get(message);
+  if (cached) {
+    return cached;
+  }
+  const normalized = normalizeMessage(message);
+  normalizedChatMessageCache.set(message, normalized);
+  return normalized;
 }
 
 function appendCanvasBlockToAssistantMessage(
@@ -204,16 +256,26 @@ function extractChatMessagePreview(toolMessage: unknown): {
   text: string | null;
   timestamp: number | null;
 } | null {
-  const normalized = normalizeMessage(toolMessage);
+  if (toolMessage && typeof toolMessage === "object") {
+    const cached = chatMessagePreviewCache.get(toolMessage);
+    if (cached !== undefined) {
+      return cached;
+    }
+  }
+  const normalized = getCachedNormalizedChatMessage(toolMessage);
   const cards = extractToolCards(toolMessage, "preview");
   for (let index = cards.length - 1; index >= 0; index--) {
     const card = cards[index];
     if (card?.preview?.kind === "canvas") {
-      return {
+      const result = {
         preview: card.preview,
         text: card.outputText ?? null,
         timestamp: normalized.timestamp ?? null,
       };
+      if (toolMessage && typeof toolMessage === "object") {
+        chatMessagePreviewCache.set(toolMessage, result);
+      }
+      return result;
     }
   }
   const text = extractTextCached(toolMessage) ?? undefined;
@@ -226,31 +288,42 @@ function extractChatMessagePreview(toolMessage: unknown): {
         : undefined;
   const preview = extractToolPreview(text, toolName);
   if (preview?.kind !== "canvas") {
+    if (toolMessage && typeof toolMessage === "object") {
+      chatMessagePreviewCache.set(toolMessage, null);
+    }
     return null;
   }
-  return { preview, text: text ?? null, timestamp: normalized.timestamp ?? null };
+  const result = { preview, text: text ?? null, timestamp: normalized.timestamp ?? null };
+  if (toolMessage && typeof toolMessage === "object") {
+    chatMessagePreviewCache.set(toolMessage, result);
+  }
+  return result;
+}
+
+function collectAssistantMessageEntries(items: ChatItem[]): AssistantIndexEntry[] {
+  const assistantEntries: AssistantIndexEntry[] = [];
+  for (let index = 0; index < items.length; index++) {
+    const item = items[index];
+    if (!item || item.kind !== "message") {
+      continue;
+    }
+    const message = item.message as Record<string, unknown>;
+    const role = typeof message.role === "string" ? message.role.toLowerCase() : "";
+    if (role !== "assistant") {
+      continue;
+    }
+    assistantEntries.push({
+      index,
+      timestamp: getCachedNormalizedChatMessage(item.message).timestamp ?? null,
+    });
+  }
+  return assistantEntries;
 }
 
 function findNearestAssistantMessageIndex(
-  items: ChatItem[],
+  assistantEntries: readonly AssistantIndexEntry[],
   toolTimestamp: number | null,
 ): number | null {
-  const assistantEntries = items
-    .map((item, index) => {
-      if (item.kind !== "message") {
-        return null;
-      }
-      const message = item.message as Record<string, unknown>;
-      const role = typeof message.role === "string" ? message.role.toLowerCase() : "";
-      if (role !== "assistant") {
-        return null;
-      }
-      return {
-        index,
-        timestamp: normalizeMessage(item.message).timestamp ?? null,
-      };
-    })
-    .filter(Boolean) as Array<{ index: number; timestamp: number | null }>;
   if (assistantEntries.length === 0) {
     return null;
   }
@@ -1151,11 +1224,18 @@ export function renderChat(props: ChatProps) {
       : `Message ${props.assistantName || "agent"} (Enter to send)`
     : "Connect to the gateway to start chatting...";
 
-  const requestUpdate = props.onRequestUpdate ?? (() => {});
+  const requestComposerUpdate = () => {
+    props.onRequestUpdate?.();
+  };
+  const requestThreadUpdate = () => {
+    bumpChatRenderRevision(props.sessionKey);
+    props.onRequestUpdate?.();
+  };
   const getDraft = props.getDraft ?? (() => props.draft);
 
   const splitRatio = props.splitRatio ?? 0.6;
   const sidebarOpen = Boolean(props.sidebarOpen && props.onCloseSidebar);
+  let fileInputEl: HTMLInputElement | null = null;
 
   const handleCodeBlockCopy = (e: Event) => {
     const btn = (e.target as HTMLElement).closest(".code-block-copy");
@@ -1172,132 +1252,155 @@ export function renderChat(props: ChatProps) {
     );
   };
 
-  const chatItems = buildChatItems(props);
+  const chatItems = getCachedChatItems(props);
+  const threadRenderRevision = getChatRenderRevision(props.sessionKey);
   syncToolCardExpansionState(props.sessionKey, chatItems, Boolean(props.autoExpandToolCalls));
   const expandedToolCards = getExpandedToolCards(props.sessionKey);
   const toggleToolCardExpanded = (toolCardId: string) => {
     expandedToolCards.set(toolCardId, !expandedToolCards.get(toolCardId));
-    requestUpdate();
+    requestThreadUpdate();
   };
   const isEmpty = chatItems.length === 0 && !props.loading;
 
-  const thread = html`
-    <div
-      class="chat-thread"
-      role="log"
-      aria-live="polite"
-      @scroll=${props.onChatScroll}
-      @click=${handleCodeBlockCopy}
-    >
-      <div class="chat-thread-inner">
-        ${props.loading
-          ? html`
-              <div class="chat-loading-skeleton" aria-label="Loading chat">
-                <div class="chat-line assistant">
-                  <div class="chat-msg">
-                    <div class="chat-bubble">
-                      <div
-                        class="skeleton skeleton-line skeleton-line--long"
-                        style="margin-bottom: 8px"
-                      ></div>
-                      <div
-                        class="skeleton skeleton-line skeleton-line--medium"
-                        style="margin-bottom: 8px"
-                      ></div>
-                      <div class="skeleton skeleton-line skeleton-line--short"></div>
+  const thread = guard(
+    [
+      chatItems,
+      threadRenderRevision,
+      props.loading,
+      props.showToolCalls,
+      showReasoning,
+      props.basePath ?? "",
+      assistantIdentity.avatar ?? "",
+      assistantIdentity.name,
+      props.canvasHostUrl ?? "",
+      props.embedSandboxMode ?? "scripts",
+      props.allowExternalEmbedUrls ?? false,
+      props.assistantAttachmentAuthToken ?? "",
+      activeSession?.contextTokens ?? props.sessions?.defaults?.contextTokens ?? null,
+      props.autoExpandToolCalls ?? false,
+      props.localMediaPreviewRoots ?? [],
+      vs.searchOpen,
+      vs.searchQuery.trim(),
+    ],
+    () => html`
+      <div
+        class="chat-thread"
+        role="log"
+        aria-live="polite"
+        @scroll=${props.onChatScroll}
+        @click=${handleCodeBlockCopy}
+      >
+        <div class="chat-thread-inner">
+          ${props.loading
+            ? html`
+                <div class="chat-loading-skeleton" aria-label="Loading chat">
+                  <div class="chat-line assistant">
+                    <div class="chat-msg">
+                      <div class="chat-bubble">
+                        <div
+                          class="skeleton skeleton-line skeleton-line--long"
+                          style="margin-bottom: 8px"
+                        ></div>
+                        <div
+                          class="skeleton skeleton-line skeleton-line--medium"
+                          style="margin-bottom: 8px"
+                        ></div>
+                        <div class="skeleton skeleton-line skeleton-line--short"></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="chat-line user" style="margin-top: 12px">
+                    <div class="chat-msg">
+                      <div class="chat-bubble">
+                        <div class="skeleton skeleton-line skeleton-line--medium"></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="chat-line assistant" style="margin-top: 12px">
+                    <div class="chat-msg">
+                      <div class="chat-bubble">
+                        <div
+                          class="skeleton skeleton-line skeleton-line--long"
+                          style="margin-bottom: 8px"
+                        ></div>
+                        <div class="skeleton skeleton-line skeleton-line--short"></div>
+                      </div>
                     </div>
                   </div>
                 </div>
-                <div class="chat-line user" style="margin-top: 12px">
-                  <div class="chat-msg">
-                    <div class="chat-bubble">
-                      <div class="skeleton skeleton-line skeleton-line--medium"></div>
-                    </div>
+              `
+            : nothing}
+          ${isEmpty && !vs.searchOpen ? renderWelcomeState(props) : nothing}
+          ${isEmpty && vs.searchOpen
+            ? html` <div class="agent-chat__empty">No matching messages</div> `
+            : nothing}
+          ${repeat(
+            chatItems,
+            (item) => item.key,
+            (item) => {
+              if (item.kind === "divider") {
+                return html`
+                  <div class="chat-divider" role="separator" data-ts=${String(item.timestamp)}>
+                    <span class="chat-divider__line"></span>
+                    <span class="chat-divider__label">${item.label}</span>
+                    <span class="chat-divider__line"></span>
                   </div>
-                </div>
-                <div class="chat-line assistant" style="margin-top: 12px">
-                  <div class="chat-msg">
-                    <div class="chat-bubble">
-                      <div
-                        class="skeleton skeleton-line skeleton-line--long"
-                        style="margin-bottom: 8px"
-                      ></div>
-                      <div class="skeleton skeleton-line skeleton-line--short"></div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            `
-          : nothing}
-        ${isEmpty && !vs.searchOpen ? renderWelcomeState(props) : nothing}
-        ${isEmpty && vs.searchOpen
-          ? html` <div class="agent-chat__empty">No matching messages</div> `
-          : nothing}
-        ${repeat(
-          chatItems,
-          (item) => item.key,
-          (item) => {
-            if (item.kind === "divider") {
-              return html`
-                <div class="chat-divider" role="separator" data-ts=${String(item.timestamp)}>
-                  <span class="chat-divider__line"></span>
-                  <span class="chat-divider__label">${item.label}</span>
-                  <span class="chat-divider__line"></span>
-                </div>
-              `;
-            }
-            if (item.kind === "reading-indicator") {
-              return renderReadingIndicatorGroup(assistantIdentity, props.basePath);
-            }
-            if (item.kind === "stream") {
-              return renderStreamingGroup(
-                item.text,
-                item.startedAt,
-                props.onOpenSidebar,
-                assistantIdentity,
-                props.basePath,
-              );
-            }
-            if (item.kind === "group") {
-              if (deleted.has(item.key)) {
-                return nothing;
+                `;
               }
-              return renderMessageGroup(item, {
-                onOpenSidebar: props.onOpenSidebar,
-                showReasoning,
-                showToolCalls: props.showToolCalls,
-                autoExpandToolCalls: Boolean(props.autoExpandToolCalls),
-                isToolMessageExpanded: (messageId: string) =>
-                  expandedToolCards.get(messageId) ?? false,
-                onToggleToolMessageExpanded: (messageId: string) => {
-                  expandedToolCards.set(messageId, !expandedToolCards.get(messageId));
-                  requestUpdate();
-                },
-                isToolExpanded: (toolCardId: string) => expandedToolCards.get(toolCardId) ?? false,
-                onToggleToolExpanded: toggleToolCardExpanded,
-                onRequestUpdate: requestUpdate,
-                assistantName: props.assistantName,
-                assistantAvatar: assistantIdentity.avatar,
-                basePath: props.basePath,
-                localMediaPreviewRoots: props.localMediaPreviewRoots ?? [],
-                assistantAttachmentAuthToken: props.assistantAttachmentAuthToken ?? null,
-                canvasHostUrl: props.canvasHostUrl,
-                embedSandboxMode: props.embedSandboxMode ?? "scripts",
-                allowExternalEmbedUrls: props.allowExternalEmbedUrls ?? false,
-                contextWindow:
-                  activeSession?.contextTokens ?? props.sessions?.defaults?.contextTokens ?? null,
-                onDelete: () => {
-                  deleted.delete(item.key);
-                  requestUpdate();
-                },
-              });
-            }
-            return nothing;
-          },
-        )}
+              if (item.kind === "reading-indicator") {
+                return renderReadingIndicatorGroup(assistantIdentity, props.basePath);
+              }
+              if (item.kind === "stream") {
+                return renderStreamingGroup(
+                  item.text,
+                  item.startedAt,
+                  props.onOpenSidebar,
+                  assistantIdentity,
+                  props.basePath,
+                );
+              }
+              if (item.kind === "group") {
+                if (deleted.has(item.key)) {
+                  return nothing;
+                }
+                return renderMessageGroup(item, {
+                  onOpenSidebar: props.onOpenSidebar,
+                  showReasoning,
+                  showToolCalls: props.showToolCalls,
+                  autoExpandToolCalls: Boolean(props.autoExpandToolCalls),
+                  isToolMessageExpanded: (messageId: string) =>
+                    expandedToolCards.get(messageId) ?? false,
+                  onToggleToolMessageExpanded: (messageId: string) => {
+                    expandedToolCards.set(messageId, !expandedToolCards.get(messageId));
+                    requestThreadUpdate();
+                  },
+                  isToolExpanded: (toolCardId: string) =>
+                    expandedToolCards.get(toolCardId) ?? false,
+                  onToggleToolExpanded: toggleToolCardExpanded,
+                  onRequestUpdate: requestThreadUpdate,
+                  assistantName: props.assistantName,
+                  assistantAvatar: assistantIdentity.avatar,
+                  basePath: props.basePath,
+                  localMediaPreviewRoots: props.localMediaPreviewRoots ?? [],
+                  assistantAttachmentAuthToken: props.assistantAttachmentAuthToken ?? null,
+                  canvasHostUrl: props.canvasHostUrl,
+                  embedSandboxMode: props.embedSandboxMode ?? "scripts",
+                  allowExternalEmbedUrls: props.allowExternalEmbedUrls ?? false,
+                  contextWindow:
+                    activeSession?.contextTokens ?? props.sessions?.defaults?.contextTokens ?? null,
+                  onDelete: () => {
+                    deleted.delete(item.key);
+                    requestThreadUpdate();
+                  },
+                });
+              }
+              return nothing;
+            },
+          )}
+        </div>
       </div>
-    </div>
-  `;
+    `,
+  );
 
   const handleKeyDown = (e: KeyboardEvent) => {
     // Slash menu navigation — arg mode
@@ -1307,26 +1410,36 @@ export function renderChat(props: ChatProps) {
         case "ArrowDown":
           e.preventDefault();
           vs.slashMenuIndex = (vs.slashMenuIndex + 1) % len;
-          requestUpdate();
+          requestComposerUpdate();
           return;
         case "ArrowUp":
           e.preventDefault();
           vs.slashMenuIndex = (vs.slashMenuIndex - 1 + len) % len;
-          requestUpdate();
+          requestComposerUpdate();
           return;
         case "Tab":
           e.preventDefault();
-          selectSlashArg(vs.slashMenuArgItems[vs.slashMenuIndex], props, requestUpdate, false);
+          selectSlashArg(
+            vs.slashMenuArgItems[vs.slashMenuIndex],
+            props,
+            requestComposerUpdate,
+            false,
+          );
           return;
         case "Enter":
           e.preventDefault();
-          selectSlashArg(vs.slashMenuArgItems[vs.slashMenuIndex], props, requestUpdate, true);
+          selectSlashArg(
+            vs.slashMenuArgItems[vs.slashMenuIndex],
+            props,
+            requestComposerUpdate,
+            true,
+          );
           return;
         case "Escape":
           e.preventDefault();
           vs.slashMenuOpen = false;
           resetSlashMenuState();
-          requestUpdate();
+          requestComposerUpdate();
           return;
       }
     }
@@ -1338,26 +1451,30 @@ export function renderChat(props: ChatProps) {
         case "ArrowDown":
           e.preventDefault();
           vs.slashMenuIndex = (vs.slashMenuIndex + 1) % len;
-          requestUpdate();
+          requestComposerUpdate();
           return;
         case "ArrowUp":
           e.preventDefault();
           vs.slashMenuIndex = (vs.slashMenuIndex - 1 + len) % len;
-          requestUpdate();
+          requestComposerUpdate();
           return;
         case "Tab":
           e.preventDefault();
-          tabCompleteSlashCommand(vs.slashMenuItems[vs.slashMenuIndex], props, requestUpdate);
+          tabCompleteSlashCommand(
+            vs.slashMenuItems[vs.slashMenuIndex],
+            props,
+            requestComposerUpdate,
+          );
           return;
         case "Enter":
           e.preventDefault();
-          selectSlashCommand(vs.slashMenuItems[vs.slashMenuIndex], props, requestUpdate);
+          selectSlashCommand(vs.slashMenuItems[vs.slashMenuIndex], props, requestComposerUpdate);
           return;
         case "Escape":
           e.preventDefault();
           vs.slashMenuOpen = false;
           resetSlashMenuState();
-          requestUpdate();
+          requestComposerUpdate();
           return;
       }
     }
@@ -1393,7 +1510,7 @@ export function renderChat(props: ChatProps) {
       if (!vs.searchOpen) {
         vs.searchQuery = "";
       }
-      requestUpdate();
+      requestThreadUpdate();
       return;
     }
 
@@ -1418,10 +1535,187 @@ export function renderChat(props: ChatProps) {
   const handleInput = (e: Event) => {
     const target = e.target as HTMLTextAreaElement;
     adjustTextareaHeight(target);
-    updateSlashMenu(target.value, requestUpdate);
+    updateSlashMenu(target.value, requestComposerUpdate);
     inputHistory.reset();
     props.onDraftChange(target.value);
   };
+
+  const composer = guard(
+    [
+      props.draft,
+      props.connected,
+      props.sending,
+      props.stream,
+      props.canAbort ?? false,
+      props.messages.length,
+      props.assistantName,
+      props.attachments ?? [],
+      vs.sttRecording,
+      vs.sttInterimText,
+      vs.slashMenuOpen,
+      vs.slashMenuMode,
+      vs.slashMenuIndex,
+      vs.slashMenuCommand?.name ?? "",
+      vs.slashMenuArgItems,
+      vs.slashMenuItems,
+    ],
+    () => html`
+      <div class="agent-chat__input">
+        ${renderSlashMenu(requestComposerUpdate, props)} ${renderAttachmentPreview(props)}
+
+        <input
+          type="file"
+          accept=${CHAT_ATTACHMENT_ACCEPT}
+          multiple
+          class="agent-chat__file-input"
+          ${ref((el) => {
+            fileInputEl = (el as HTMLInputElement | null) ?? null;
+          })}
+          @change=${(e: Event) => handleFileSelect(e, props)}
+        />
+
+        ${vs.sttRecording && vs.sttInterimText
+          ? html`<div class="agent-chat__stt-interim">${vs.sttInterimText}</div>`
+          : nothing}
+
+        <div class="agent-chat__composer">
+          <div class="agent-chat__toolbar-left">
+            <button
+              class="agent-chat__input-btn"
+              @click=${() => {
+                fileInputEl?.click();
+              }}
+              title="Attach file"
+              aria-label="Attach file"
+              ?disabled=${!props.connected}
+            >
+              ${icons.paperclip}
+            </button>
+
+            ${isSttSupported()
+              ? html`
+                  <button
+                    class="agent-chat__input-btn ${vs.sttRecording
+                      ? "agent-chat__input-btn--recording"
+                      : ""}"
+                    @click=${() => {
+                      if (vs.sttRecording) {
+                        stopStt();
+                        vs.sttRecording = false;
+                        vs.sttInterimText = "";
+                        requestComposerUpdate();
+                      } else {
+                        const started = startStt({
+                          onTranscript: (text, isFinal) => {
+                            if (isFinal) {
+                              const current = getDraft();
+                              const sep = current && !current.endsWith(" ") ? " " : "";
+                              props.onDraftChange(current + sep + text);
+                              vs.sttInterimText = "";
+                            } else {
+                              vs.sttInterimText = text;
+                            }
+                            requestComposerUpdate();
+                          },
+                          onStart: () => {
+                            vs.sttRecording = true;
+                            requestComposerUpdate();
+                          },
+                          onEnd: () => {
+                            vs.sttRecording = false;
+                            vs.sttInterimText = "";
+                            requestComposerUpdate();
+                          },
+                          onError: () => {
+                            vs.sttRecording = false;
+                            vs.sttInterimText = "";
+                            requestComposerUpdate();
+                          },
+                        });
+                        if (started) {
+                          vs.sttRecording = true;
+                          requestComposerUpdate();
+                        }
+                      }
+                    }}
+                    title=${vs.sttRecording ? "Stop recording" : "Voice input"}
+                    ?disabled=${!props.connected}
+                  >
+                    ${vs.sttRecording ? icons.micOff : icons.mic}
+                  </button>
+                `
+              : nothing}
+          </div>
+
+          <textarea
+            ${ref((el) => el && adjustTextareaHeight(el as HTMLTextAreaElement))}
+            .value=${props.draft}
+            dir=${detectTextDirection(props.draft)}
+            ?disabled=${!props.connected}
+            @keydown=${handleKeyDown}
+            @input=${handleInput}
+            @paste=${(e: ClipboardEvent) => handlePaste(e, props)}
+            placeholder=${vs.sttRecording ? "Listening..." : placeholder}
+            rows="1"
+          ></textarea>
+
+          <div class="agent-chat__toolbar-right">
+            ${tokens ? html`<span class="agent-chat__token-count">${tokens}</span>` : nothing}
+            ${nothing /* search hidden for now */}
+            ${canAbort
+              ? nothing
+              : html`
+                  <button
+                    class="btn btn--ghost"
+                    @click=${props.onNewSession}
+                    title="New session"
+                    aria-label="New session"
+                  >
+                    ${icons.plus}
+                  </button>
+                `}
+            <button
+              class="btn btn--ghost"
+              @click=${() => exportMarkdown(props)}
+              title="Export"
+              aria-label="Export chat"
+              ?disabled=${props.messages.length === 0}
+            >
+              ${icons.download}
+            </button>
+
+            ${canAbort
+              ? html`
+                  <button
+                    class="chat-send-btn chat-send-btn--stop"
+                    @click=${props.onAbort}
+                    title="Stop"
+                    aria-label="Stop generating"
+                  >
+                    ${icons.stop}
+                  </button>
+                `
+              : html`
+                  <button
+                    class="chat-send-btn"
+                    @click=${() => {
+                      if (props.draft.trim()) {
+                        inputHistory.push(props.draft);
+                      }
+                      props.onSend();
+                    }}
+                    ?disabled=${!props.connected || props.sending}
+                    title=${isBusy ? "Queue" : "Send"}
+                    aria-label=${isBusy ? "Queue message" : "Send message"}
+                  >
+                    ${icons.send}
+                  </button>
+                `}
+          </div>
+        </div>
+      </div>
+    `,
+  );
 
   return html`
     <section
@@ -1444,15 +1738,11 @@ export function renderChat(props: ChatProps) {
             </button>
           `
         : nothing}
-      ${renderSearchBar(requestUpdate)} ${renderPinnedSection(props, pinned, requestUpdate)}
+      ${renderSearchBar(requestThreadUpdate)}
+      ${renderPinnedSection(props, pinned, requestThreadUpdate)}
 
       <div class="chat-split-container ${sidebarOpen ? "chat-split-container--open" : ""}">
-        <div
-          class="chat-main"
-          style="flex: ${sidebarOpen ? `0 0 ${splitRatio * 100}%` : "1 1 100%"}"
-        >
-          ${thread}
-        </div>
+        <div class="chat-main" style="flex: 1 1 100%">${thread}</div>
 
         ${sidebarOpen
           ? html`
@@ -1530,157 +1820,7 @@ export function renderChat(props: ChatProps) {
         : nothing}
 
       <!-- Input bar -->
-      <div class="agent-chat__input">
-        ${renderSlashMenu(requestUpdate, props)} ${renderAttachmentPreview(props)}
-
-        <input
-          type="file"
-          accept=${CHAT_ATTACHMENT_ACCEPT}
-          multiple
-          class="agent-chat__file-input"
-          @change=${(e: Event) => handleFileSelect(e, props)}
-        />
-
-        ${vs.sttRecording && vs.sttInterimText
-          ? html`<div class="agent-chat__stt-interim">${vs.sttInterimText}</div>`
-          : nothing}
-
-        <textarea
-          ${ref((el) => el && adjustTextareaHeight(el as HTMLTextAreaElement))}
-          .value=${props.draft}
-          dir=${detectTextDirection(props.draft)}
-          ?disabled=${!props.connected}
-          @keydown=${handleKeyDown}
-          @input=${handleInput}
-          @paste=${(e: ClipboardEvent) => handlePaste(e, props)}
-          placeholder=${vs.sttRecording ? "Listening..." : placeholder}
-          rows="1"
-        ></textarea>
-
-        <div class="agent-chat__toolbar">
-          <div class="agent-chat__toolbar-left">
-            <button
-              class="agent-chat__input-btn"
-              @click=${() => {
-                document.querySelector<HTMLInputElement>(".agent-chat__file-input")?.click();
-              }}
-              title="Attach file"
-              aria-label="Attach file"
-              ?disabled=${!props.connected}
-            >
-              ${icons.paperclip}
-            </button>
-
-            ${isSttSupported()
-              ? html`
-                  <button
-                    class="agent-chat__input-btn ${vs.sttRecording
-                      ? "agent-chat__input-btn--recording"
-                      : ""}"
-                    @click=${() => {
-                      if (vs.sttRecording) {
-                        stopStt();
-                        vs.sttRecording = false;
-                        vs.sttInterimText = "";
-                        requestUpdate();
-                      } else {
-                        const started = startStt({
-                          onTranscript: (text, isFinal) => {
-                            if (isFinal) {
-                              const current = getDraft();
-                              const sep = current && !current.endsWith(" ") ? " " : "";
-                              props.onDraftChange(current + sep + text);
-                              vs.sttInterimText = "";
-                            } else {
-                              vs.sttInterimText = text;
-                            }
-                            requestUpdate();
-                          },
-                          onStart: () => {
-                            vs.sttRecording = true;
-                            requestUpdate();
-                          },
-                          onEnd: () => {
-                            vs.sttRecording = false;
-                            vs.sttInterimText = "";
-                            requestUpdate();
-                          },
-                          onError: () => {
-                            vs.sttRecording = false;
-                            vs.sttInterimText = "";
-                            requestUpdate();
-                          },
-                        });
-                        if (started) {
-                          vs.sttRecording = true;
-                          requestUpdate();
-                        }
-                      }
-                    }}
-                    title=${vs.sttRecording ? "Stop recording" : "Voice input"}
-                    ?disabled=${!props.connected}
-                  >
-                    ${vs.sttRecording ? icons.micOff : icons.mic}
-                  </button>
-                `
-              : nothing}
-            ${tokens ? html`<span class="agent-chat__token-count">${tokens}</span>` : nothing}
-          </div>
-
-          <div class="agent-chat__toolbar-right">
-            ${nothing /* search hidden for now */}
-            ${canAbort
-              ? nothing
-              : html`
-                  <button
-                    class="btn btn--ghost"
-                    @click=${props.onNewSession}
-                    title="New session"
-                    aria-label="New session"
-                  >
-                    ${icons.plus}
-                  </button>
-                `}
-            <button
-              class="btn btn--ghost"
-              @click=${() => exportMarkdown(props)}
-              title="Export"
-              aria-label="Export chat"
-              ?disabled=${props.messages.length === 0}
-            >
-              ${icons.download}
-            </button>
-
-            ${canAbort
-              ? html`
-                  <button
-                    class="chat-send-btn chat-send-btn--stop"
-                    @click=${props.onAbort}
-                    title="Stop"
-                    aria-label="Stop generating"
-                  >
-                    ${icons.stop}
-                  </button>
-                `
-              : html`
-                  <button
-                    class="chat-send-btn"
-                    @click=${() => {
-                      if (props.draft.trim()) {
-                        inputHistory.push(props.draft);
-                      }
-                      props.onSend();
-                    }}
-                    ?disabled=${!props.connected || props.sending}
-                    title=${isBusy ? "Queue" : "Send"}
-                    aria-label=${isBusy ? "Queue message" : "Send message"}
-                  >
-                    ${icons.send}
-                  </button>
-                `}
-          </div>
-        </div>
-      </div>
+      ${composer}
     </section>
   `;
 }
@@ -1701,7 +1841,7 @@ function groupMessages(items: ChatItem[]): Array<ChatItem | MessageGroup> {
       continue;
     }
 
-    const normalized = normalizeMessage(item.message);
+    const normalized = getCachedNormalizedChatMessage(item.message);
     const role = normalizeRoleForGrouping(normalized.role);
     const senderLabel = role.toLowerCase() === "user" ? (normalized.senderLabel ?? null) : null;
     const timestamp = normalized.timestamp || Date.now();
@@ -1752,7 +1892,7 @@ function buildChatItems(props: ChatProps): Array<ChatItem | MessageGroup> {
   }
   for (let i = historyStart; i < history.length; i++) {
     const msg = history[i];
-    const normalized = normalizeMessage(msg);
+    const normalized = getCachedNormalizedChatMessage(msg);
     const raw = msg as Record<string, unknown>;
     const marker = raw.__openclaw as Record<string, unknown> | undefined;
     if (marker && marker.kind === "compaction") {
@@ -1783,6 +1923,7 @@ function buildChatItems(props: ChatProps): Array<ChatItem | MessageGroup> {
       message: msg,
     });
   }
+  const assistantEntries = collectAssistantMessageEntries(items);
   const liftedCanvasSources = tools
     .map((tool) => extractChatMessagePreview(tool))
     .filter((entry) => Boolean(entry)) as Array<{
@@ -1791,7 +1932,10 @@ function buildChatItems(props: ChatProps): Array<ChatItem | MessageGroup> {
     timestamp: number | null;
   }>;
   for (const liftedCanvasSource of liftedCanvasSources) {
-    const assistantIndex = findNearestAssistantMessageIndex(items, liftedCanvasSource.timestamp);
+    const assistantIndex = findNearestAssistantMessageIndex(
+      assistantEntries,
+      liftedCanvasSource.timestamp,
+    );
     if (assistantIndex == null) {
       continue;
     }
@@ -1846,6 +1990,38 @@ function buildChatItems(props: ChatProps): Array<ChatItem | MessageGroup> {
   }
 
   return groupMessages(items);
+}
+
+function getCachedChatItems(props: ChatProps): Array<ChatItem | MessageGroup> {
+  const searchQuery = vs.searchQuery.trim();
+  const cached = chatItemsCacheBySession.get(props.sessionKey);
+  if (
+    cached &&
+    cached.messagesRef === props.messages &&
+    cached.toolMessagesRef === props.toolMessages &&
+    cached.streamSegmentsRef === props.streamSegments &&
+    cached.stream === props.stream &&
+    cached.streamStartedAt === props.streamStartedAt &&
+    cached.showToolCalls === props.showToolCalls &&
+    cached.searchOpen === vs.searchOpen &&
+    cached.searchQuery === searchQuery
+  ) {
+    return cached.items;
+  }
+
+  const items = buildChatItems(props);
+  chatItemsCacheBySession.set(props.sessionKey, {
+    messagesRef: props.messages,
+    toolMessagesRef: props.toolMessages,
+    streamSegmentsRef: props.streamSegments,
+    stream: props.stream,
+    streamStartedAt: props.streamStartedAt,
+    showToolCalls: props.showToolCalls,
+    searchOpen: vs.searchOpen,
+    searchQuery,
+    items,
+  });
+  return items;
 }
 
 function messageKey(message: unknown, index: number): string {

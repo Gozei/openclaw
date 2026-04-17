@@ -13,7 +13,8 @@ import {
   DEFAULT_CHAT_MODEL_CATALOG,
 } from "../chat-model.test-helpers.ts";
 import { resetAssistantAttachmentAvailabilityCacheForTest } from "../chat/grouped-render.ts";
-import { normalizeMessage } from "../chat/message-normalizer.ts";
+import * as messageNormalizer from "../chat/message-normalizer.ts";
+import * as toolCardsModule from "../chat/tool-cards.ts";
 import type { GatewayBrowserClient } from "../gateway.ts";
 import type { ModelCatalogEntry } from "../types.ts";
 import type { SessionsListResult } from "../types.ts";
@@ -195,6 +196,20 @@ function createProps(overrides: Partial<ChatProps> = {}): ChatProps {
     onAgentChange: () => undefined,
     ...overrides,
   };
+}
+
+function createLargeHistory(count: number) {
+  return Array.from({ length: count }, (_, index) => ({
+    id: `history-${index}`,
+    role: index % 2 === 0 ? "assistant" : "user",
+    content: [
+      {
+        type: "text",
+        text: `History message ${index} with enough content to exercise normalization.`,
+      },
+    ],
+    timestamp: index + 1,
+  }));
 }
 
 function createOverviewProps(overrides: Partial<OverviewProps> = {}): OverviewProps {
@@ -2374,7 +2389,7 @@ describe("chat view", () => {
           localMediaPreviewRoots: ["/Users/test/Pictures"],
           onRequestUpdate: () => undefined,
           messages: [
-            normalizeMessage({
+            messageNormalizer.normalizeMessage({
               id: "assistant-tilde-local-media",
               role: "assistant",
               content: [
@@ -2759,5 +2774,183 @@ describe("chat view", () => {
 
     expect(container.textContent).not.toContain("Tool input");
     expect(container.textContent).toContain('"status": "error"');
+  });
+
+  it("does not use a document query to trigger the file picker", () => {
+    const container = document.createElement("div");
+    render(renderChat(createProps()), container);
+
+    const querySpy = vi.spyOn(document, "querySelector");
+    querySpy.mockClear();
+
+    const attachButton = container.querySelector<HTMLButtonElement>(".agent-chat__input-btn");
+    expect(attachButton).not.toBeNull();
+
+    attachButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+    expect(querySpy).not.toHaveBeenCalled();
+    querySpy.mockRestore();
+  });
+
+  it("does not re-normalize message history when only the draft changes", () => {
+    const container = document.createElement("div");
+    const props = createProps({
+      draft: "",
+      messages: [
+        {
+          id: "assistant-draft-cache",
+          role: "assistant",
+          content: [{ type: "text", text: "Hello from cache." }],
+          timestamp: 1,
+        },
+      ],
+    });
+
+    const normalizeSpy = vi.spyOn(messageNormalizer, "normalizeMessage");
+
+    render(renderChat(props), container);
+    expect(normalizeSpy).toHaveBeenCalled();
+
+    normalizeSpy.mockClear();
+    render(renderChat({ ...props, draft: "next draft" }), container);
+
+    expect(normalizeSpy).not.toHaveBeenCalled();
+    normalizeSpy.mockRestore();
+  });
+
+  it("does not re-normalize message history when slash-menu state changes locally", async () => {
+    const container = document.createElement("div");
+    const props = createProps({
+      draft: "",
+      messages: [
+        {
+          id: "assistant-slash-cache",
+          role: "assistant",
+          content: [{ type: "text", text: "Slash menu should stay local." }],
+          timestamp: 1,
+        },
+      ],
+    });
+
+    const rerender = () => {
+      render(renderChat({ ...props, onRequestUpdate: rerender }), container);
+    };
+    const normalizeSpy = vi.spyOn(messageNormalizer, "normalizeMessage");
+
+    rerender();
+    expect(normalizeSpy).toHaveBeenCalled();
+
+    normalizeSpy.mockClear();
+    const textarea = container.querySelector<HTMLTextAreaElement>("textarea");
+    expect(textarea).not.toBeNull();
+    textarea!.value = "/";
+    textarea!.dispatchEvent(new Event("input", { bubbles: true }));
+    await flushTasks();
+
+    expect(normalizeSpy).not.toHaveBeenCalled();
+    normalizeSpy.mockRestore();
+  });
+
+  it("does not re-extract tool previews when only the draft changes", () => {
+    const container = document.createElement("div");
+    const toolPreviewMessage = {
+      id: "tool-canvas-preview",
+      role: "tool",
+      toolName: "canvas_render",
+      content: JSON.stringify({
+        kind: "canvas",
+        source: {
+          type: "html",
+          content: "<div>Preview</div>",
+        },
+        presentation: {
+          target: "chat_message",
+          title: "Preview",
+        },
+      }),
+      timestamp: 2,
+    };
+    const props = createProps({
+      draft: "",
+      messages: [
+        {
+          id: "assistant-tool-preview-target",
+          role: "assistant",
+          content: [{ type: "text", text: "Latest canvas preview" }],
+          timestamp: 1,
+        },
+      ],
+      toolMessages: [toolPreviewMessage],
+    });
+
+    const extractToolCardsSpy = vi.spyOn(toolCardsModule, "extractToolCards");
+
+    render(renderChat(props), container);
+    expect(
+      extractToolCardsSpy.mock.calls.some(
+        ([message, prefix]) => message === toolPreviewMessage && prefix === "preview",
+      ),
+    ).toBe(true);
+
+    extractToolCardsSpy.mockClear();
+    render(renderChat({ ...props, draft: "next draft" }), container);
+
+    expect(
+      extractToolCardsSpy.mock.calls.some(
+        ([message, prefix]) => message === toolPreviewMessage && prefix === "preview",
+      ),
+    ).toBe(false);
+    extractToolCardsSpy.mockRestore();
+  });
+
+  it("keeps large-history draft updates off message hot paths", () => {
+    const container = document.createElement("div");
+    const toolPreviewMessage = {
+      id: "tool-canvas-preview-large-history",
+      role: "tool",
+      toolName: "canvas_render",
+      content: JSON.stringify({
+        kind: "canvas",
+        source: {
+          type: "html",
+          content: "<div>Preview</div>",
+        },
+        presentation: {
+          target: "chat_message",
+          title: "Large history preview",
+        },
+      }),
+      timestamp: 10_000,
+    };
+    const props = createProps({
+      draft: "",
+      messages: createLargeHistory(200),
+      toolMessages: [toolPreviewMessage],
+    });
+
+    const normalizeSpy = vi.spyOn(messageNormalizer, "normalizeMessage");
+    const extractToolCardsSpy = vi.spyOn(toolCardsModule, "extractToolCards");
+
+    render(renderChat(props), container);
+    expect(normalizeSpy).toHaveBeenCalled();
+    expect(
+      extractToolCardsSpy.mock.calls.some(
+        ([message, prefix]) => message === toolPreviewMessage && prefix === "preview",
+      ),
+    ).toBe(true);
+
+    normalizeSpy.mockClear();
+    extractToolCardsSpy.mockClear();
+    render(renderChat({ ...props, draft: "performance draft update" }), container);
+
+    expect(normalizeSpy).not.toHaveBeenCalled();
+    expect(
+      extractToolCardsSpy.mock.calls.some(
+        ([message, prefix]) => message === toolPreviewMessage && prefix === "preview",
+      ),
+    ).toBe(false);
+
+    normalizeSpy.mockRestore();
+    extractToolCardsSpy.mockRestore();
   });
 });

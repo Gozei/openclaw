@@ -3,14 +3,19 @@
    ============================================= */
 
 .chat-thinking {
-  margin-bottom: 10px;
-  padding: 10px 12px;
-  border-radius: var(--radius-md);
-  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
-  background: color-mix(in srgb, var(--bg-elevated) 92%, transparent);
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, white 72%, var(--bg-elevated) 28%),
+      color-mix(in srgb, var(--bg-hover) 84%, transparent)
+    );
   color: var(--muted);
   font-size: 12px;
-  line-height: 1.4;
+  line-height: 1.5;
 }
 
 :root[data-theme-mode="light"] .chat-thinking {
@@ -19,10 +24,11 @@
 }
 
 .chat-text {
-  font-size: 14px;
-  line-height: 1.62;
+  font-size: 15px;
+  line-height: 1.72;
   word-wrap: break-word;
   overflow-wrap: break-word;
+  color: var(--text-strong);
 }
 
 .chat-text :where(p, ul, ol, pre, blockquote, table) {
@@ -85,19 +91,19 @@
 }
 
 .chat-text :where(:not(pre) > code) {
-  background: color-mix(in srgb, var(--accent-subtle) 58%, transparent);
-  padding: 0.16em 0.45em;
-  border-radius: 6px;
-  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  background: color-mix(in srgb, var(--bg-hover) 86%, white 14%);
+  padding: 0.18em 0.5em;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
   overflow-wrap: normal;
   word-break: keep-all;
 }
 
 .chat-text :where(pre) {
-  background: color-mix(in srgb, var(--bg-accent) 94%, transparent);
-  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
-  border-radius: 12px;
-  padding: 12px 14px;
+  background: color-mix(in srgb, var(--bg-accent) 96%, white 4%);
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  border-radius: 16px;
+  padding: 14px 16px;
   overflow-x: auto;
 }
 
@@ -108,12 +114,12 @@
 
 .chat-text :where(blockquote) {
   border-left: 3px solid color-mix(in srgb, var(--accent) 36%, var(--border));
-  padding-left: 12px;
+  padding-left: 14px;
   margin-left: 0;
   color: var(--muted);
-  background: color-mix(in srgb, var(--bg-elevated) 92%, transparent);
-  padding: 10px 12px;
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: color-mix(in srgb, var(--bg-elevated) 92%, white 8%);
+  padding: 12px 14px;
+  border-radius: 0 14px 14px 0;
 }
 
 .chat-text :where(blockquote blockquote) {

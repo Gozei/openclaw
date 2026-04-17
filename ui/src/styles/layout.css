@@ -3,11 +3,11 @@
    =========================================== */
 
 .shell {
-  --shell-pad: 18px;
-  --shell-gap: 18px;
-  --shell-nav-width: 272px;
+  --shell-pad: 20px;
+  --shell-gap: 20px;
+  --shell-nav-width: 248px;
   --shell-nav-rail-width: 78px;
-  --shell-topbar-height: 56px;
+  --shell-topbar-height: 60px;
   --shell-focus-duration: 200ms;
   --shell-focus-ease: var(--ease-out);
   height: 100vh;
@@ -22,18 +22,7 @@
   transition: grid-template-columns var(--shell-focus-duration) var(--shell-focus-ease);
   overflow: hidden;
   position: relative;
-  background:
-    radial-gradient(
-      circle at 100% 0%,
-      color-mix(in srgb, var(--accent) 14%, transparent),
-      transparent 28%
-    ),
-    radial-gradient(
-      circle at 0% 100%,
-      color-mix(in srgb, var(--accent-2) 10%, transparent),
-      transparent 24%
-    ),
-    linear-gradient(180deg, var(--bg-content) 0%, var(--bg) 100%);
+  background: linear-gradient(180deg, var(--bg-content) 0%, var(--bg) 100%);
 }
 
 @supports (height: 100dvh) {
@@ -98,13 +87,13 @@
   z-index: 40;
   display: flex;
   align-items: center;
-  padding: 0 24px 0 22px;
-  min-height: 56px;
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
-  background: color-mix(in srgb, var(--chrome-strong) 94%, transparent);
-  backdrop-filter: blur(14px) saturate(1.1);
-  -webkit-backdrop-filter: blur(14px) saturate(1.1);
-  box-shadow: 0 1px 2px color-mix(in srgb, black 10%, transparent);
+  padding: 0 22px;
+  min-height: 58px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  background: color-mix(in srgb, var(--chrome-strong) 96%, transparent);
+  backdrop-filter: blur(20px) saturate(1.01);
+  -webkit-backdrop-filter: blur(20px) saturate(1.01);
+  box-shadow: none;
 }
 
 .topnav-shell {
@@ -163,7 +152,7 @@
 .topnav-shell .dashboard-header__breadcrumb {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
   min-width: 0;
   overflow: hidden;
   font-size: 13px;
@@ -177,9 +166,9 @@
 .topnav-shell .dashboard-header__brand-link {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
   color: var(--text-strong);
-  font-weight: 600;
+  font-weight: 620;
   cursor: pointer;
   transition: color var(--duration-fast) ease;
 }
@@ -189,16 +178,16 @@
 }
 
 .topnav-shell .dashboard-header__brand-logo {
-  width: 20px;
-  height: 20px;
-  border-radius: 7px;
-  box-shadow: var(--shadow-sm);
+  width: 17px;
+  height: 17px;
+  border-radius: 4px;
+  box-shadow: none;
   flex-shrink: 0;
 }
 
 .topnav-shell .dashboard-header__breadcrumb-current {
   color: var(--text-strong);
-  font-weight: 600;
+  font-weight: 580;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -207,7 +196,7 @@
 .topbar-status {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
 .topbar-status .pill {
@@ -245,18 +234,18 @@
   align-items: center;
   gap: 10px;
   min-height: 36px;
-  padding: 0 14px;
-  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
-  border-radius: var(--radius-full);
-  background: color-mix(in srgb, var(--bg-elevated) 84%, var(--bg-hover));
+  padding: 0 14px 0 16px;
+  border: 1px solid color-mix(in srgb, var(--border) 92%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-elevated) 88%, transparent);
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   cursor: pointer;
   transition:
     border-color var(--duration-fast) ease,
     background var(--duration-fast) ease,
     color var(--duration-fast) ease;
-  min-width: clamp(180px, 18vw, 264px);
+  min-width: clamp(180px, 17vw, 220px);
 }
 
 .topbar-search:hover {
@@ -279,12 +268,12 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 2px 6px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg);
+  padding: 2px 7px;
+  border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg) 72%, white 28%);
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1;
   color: var(--muted);
 }
@@ -295,19 +284,19 @@
   gap: 2px;
   padding: 2px;
   border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
-  border-radius: var(--radius-full);
-  background: color-mix(in srgb, var(--bg-elevated) 92%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--bg-elevated) 90%, transparent);
 }
 
 .topbar-theme-mode__btn {
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   padding: 0;
   border: 1px solid transparent;
-  border-radius: var(--radius-full);
+  border-radius: 11px;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
@@ -354,7 +343,7 @@
   overflow: hidden;
   border-right: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
   transition: width var(--shell-focus-duration) var(--shell-focus-ease);
-  background: color-mix(in srgb, var(--panel) 96%, transparent);
+  background: color-mix(in srgb, var(--panel) 100%, transparent);
 }
 
 .shell-nav-backdrop {
@@ -368,7 +357,7 @@
   min-height: 0;
   min-width: 0;
   overflow: hidden;
-  background: color-mix(in srgb, var(--panel) 98%, transparent);
+  background: color-mix(in srgb, var(--panel) 100%, transparent);
 }
 
 :root[data-theme-mode="light"] .sidebar {
@@ -380,7 +369,7 @@
   flex-direction: column;
   min-height: 0;
   flex: 1;
-  padding: 14px 10px 12px;
+  padding: 18px 12px 14px;
   border: none;
   border-radius: 0;
   background: transparent;
@@ -405,7 +394,7 @@
   justify-content: space-between;
   gap: 12px;
   min-height: 0;
-  padding: 0 8px 16px;
+  padding: 0 10px 18px;
 }
 
 .sidebar-shell__body {
@@ -427,12 +416,12 @@
 }
 
 .sidebar-brand__logo {
-  width: 34px;
-  height: 34px;
+  width: 28px;
+  height: 28px;
   flex-shrink: 0;
-  border-radius: 10px;
-  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border));
-  box-shadow: var(--shadow-sm);
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--border) 94%, transparent);
+  box-shadow: none;
 }
 
 .sidebar-brand__copy {
@@ -446,17 +435,17 @@
   font-size: 10px;
   line-height: 1.1;
   font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.12em;
   color: var(--muted);
-  text-transform: none;
+  text-transform: uppercase;
 }
 
 .sidebar-brand__title {
   font-family: var(--font-display);
-  font-size: 16px;
+  font-size: 22px;
   line-height: 1.1;
-  font-weight: 700;
-  letter-spacing: -0.03em;
+  font-weight: 630;
+  letter-spacing: -0.05em;
   color: var(--text-strong);
   white-space: nowrap;
   overflow: hidden;
@@ -523,8 +512,8 @@
 
 .nav-section {
   display: grid;
-  gap: 4px;
-  margin-bottom: 14px;
+  gap: 6px;
+  margin-bottom: 18px;
 }
 
 .nav-section:last-child {
@@ -533,7 +522,7 @@
 
 .nav-section__items {
   display: grid;
-  gap: 3px;
+  gap: 4px;
 }
 
 .nav-section--collapsed .nav-section__items {
@@ -546,8 +535,8 @@
   justify-content: space-between;
   gap: 8px;
   width: 100%;
-  padding: 0 8px;
-  min-height: 24px;
+  padding: 0 12px;
+  min-height: 22px;
   background: transparent;
   border: none;
   border-radius: var(--radius-md);
@@ -565,10 +554,10 @@
 }
 
 .nav-section__label-text {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
-  letter-spacing: 0.02em;
-  text-transform: none;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
 .nav-section__chevron {
@@ -599,12 +588,12 @@
   align-items: center;
   justify-content: flex-start;
   gap: 10px;
-  min-height: 40px;
+  min-height: 38px;
   padding: 0 12px;
-  border-radius: 14px;
+  border-radius: 12px;
   border: 1px solid transparent;
   background: transparent;
-  color: var(--muted-strong);
+  color: var(--muted);
   cursor: pointer;
   text-decoration: none;
   transition:
@@ -656,16 +645,16 @@
 
 .nav-item.active,
 .nav-item--active {
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent-subtle) 90%, var(--bg-elevated) 10%);
-  border-color: color-mix(in srgb, var(--accent) 20%, transparent);
+  color: var(--text-strong);
+  background: color-mix(in srgb, var(--bg-elevated) 100%, transparent);
+  border-color: color-mix(in srgb, var(--border) 94%, transparent);
   box-shadow: none;
 }
 
 .nav-item.active .nav-item__icon,
 .nav-item--active .nav-item__icon {
   opacity: 1;
-  color: var(--accent);
+  color: var(--text-strong);
 }
 
 .sidebar--collapsed .sidebar-shell {
@@ -778,11 +767,11 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  min-height: 40px;
+  min-height: 38px;
   padding: 0 10px;
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--bg-elevated) 92%, transparent);
-  border: 1px solid color-mix(in srgb, var(--border) 68%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-elevated) 100%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 94%, transparent);
 }
 
 .sidebar-version__label {
@@ -899,7 +888,7 @@
 
 .content {
   grid-area: content;
-  padding: 16px 18px 26px;
+  padding: 18px 22px 28px;
   display: block;
   min-height: 0;
   overflow-y: auto;
@@ -932,8 +921,8 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
-  padding: 2px 4px 4px;
+  gap: 16px;
+  padding: 4px 0 10px;
   overflow: hidden;
   transform-origin: top center;
   transition:
@@ -941,7 +930,7 @@
     transform var(--shell-focus-duration) var(--shell-focus-ease),
     max-height var(--shell-focus-duration) var(--shell-focus-ease),
     padding var(--shell-focus-duration) var(--shell-focus-ease);
-  max-height: 160px;
+  max-height: 220px;
 }
 
 .shell--chat-focus .content-header {
@@ -1066,28 +1055,85 @@
 
 /* Chat view header adjustments */
 .content--chat .content-header {
-  flex-direction: row;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-  row-gap: 10px;
-  padding-bottom: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+  justify-content: stretch;
+  gap: 10px;
+  width: min(100%, 1240px);
+  margin: 0 auto;
+  padding: 10px 0 6px;
 }
 
-.content--chat .content-header > div:first-child {
-  text-align: left;
-  flex: 1 1 720px;
+.content--chat .content-header--chat {
+  max-width: none;
+}
+
+.chat-workspace-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 14px;
+  width: 100%;
   min-width: 0;
 }
 
-.content--chat .page-meta {
-  justify-content: flex-start;
+.chat-workspace-header__selectors,
+.chat-workspace-header__actions {
+  min-width: 0;
 }
 
-.content--chat .chat-controls {
-  flex-shrink: 0;
-  margin-left: auto;
+.chat-workspace-header__actions {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.content--chat .page-title,
+.content--chat .page-sub {
+  display: none;
+}
+
+@media (max-width: 1180px) {
+  .content--chat .content-header {
+    width: 100%;
+    padding: 8px 0 4px;
+  }
+
+  .chat-workspace-header {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .chat-workspace-header__actions {
+    justify-content: flex-start;
+    align-items: stretch;
+  }
+}
+
+@media (max-width: 960px) {
+  .topbar {
+    padding: 0 16px;
+  }
+
+  .topbar-search {
+    min-width: 156px;
+  }
+}
+
+@media (max-width: 760px) {
+  .topnav-shell .dashboard-header__breadcrumb-sep {
+    display: none;
+  }
+
+  .topnav-shell .dashboard-header__breadcrumb-current {
+    display: none;
+  }
+
+  .chat-workspace-header__actions {
+    width: 100%;
+  }
 }
 
 /* ===========================================

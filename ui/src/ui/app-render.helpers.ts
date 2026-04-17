@@ -189,86 +189,94 @@ export function renderChatSessionSelect(state: AppViewState) {
     sessionGroups.flatMap((group) => group.options).find((entry) => entry.key === state.sessionKey)
       ?.label ?? state.sessionKey;
   return html`
-    <div class="chat-controls__session-row">
-      <label class="field chat-controls__session">
-        <select
-          .value=${state.sessionKey}
-          title=${selectedSessionLabel}
-          ?disabled=${!state.connected || sessionGroups.length === 0}
-          @change=${(e: Event) => {
-            const next = (e.target as HTMLSelectElement).value;
-            if (state.sessionKey === next) {
-              return;
-            }
-            switchChatSession(state, next);
-          }}
-        >
-          ${repeat(
-            sessionGroups,
-            (group) => group.id,
-            (group) =>
-              html`<optgroup label=${group.label}>
-                ${repeat(
-                  group.options,
-                  (entry) => entry.key,
-                  (entry) =>
-                    html`<option
-                      value=${entry.key}
-                      title=${entry.title}
-                      ?selected=${entry.key === state.sessionKey}
-                    >
-                      ${entry.label}
-                    </option>`,
-                )}
-              </optgroup>`,
-          )}
-        </select>
-      </label>
-      <label class="field chat-controls__session">
-        <select
-          .value=${activeAgentOverrideId}
-          title=${`Agent: ${activeAgentId}`}
-          ?disabled=${!state.connected || state.chatSending || Boolean(state.chatRunId)}
-          data-chat-agent-select="true"
-          @change=${(e: Event) => {
-            const nextAgentId =
-              normalizeOptionalString((e.target as HTMLSelectElement).value) ?? null;
-            void (async () => {
-              await patchSession(state, state.sessionKey, { agentId: nextAgentId });
-              await refreshChatAvatar(state);
-              await refreshSlashCommands({
-                client: state.client,
-                agentId:
-                  state.sessionsResult?.sessions?.find((row) => row.key === state.sessionKey)
-                    ?.agentId ??
-                  nextAgentId ??
-                  state.agentsList?.defaultId ??
-                  "main",
-              });
-              if (state.agentsPanel === "tools") {
-                await refreshVisibleToolsEffectiveForCurrentSession(state);
+    <div class="chat-toolbar">
+      <div class="chat-toolbar__summary">
+        <span class="chat-toolbar__eyebrow">Workspace</span>
+        <span class="chat-toolbar__title">${selectedSessionLabel}</span>
+      </div>
+      <div class="chat-controls__session-row">
+        <label class="field chat-controls__session">
+          <span class="chat-controls__field-label">Session</span>
+          <select
+            .value=${state.sessionKey}
+            title=${selectedSessionLabel}
+            ?disabled=${!state.connected || sessionGroups.length === 0}
+            @change=${(e: Event) => {
+              const next = (e.target as HTMLSelectElement).value;
+              if (state.sessionKey === next) {
+                return;
               }
-            })();
-          }}
-        >
-          <option value="">
-            ${state.agentsList?.defaultId
-              ? `Default agent (${state.agentsList.defaultId})`
-              : "Default agent"}
-          </option>
-          ${repeat(
-            state.agentsList?.agents ?? [],
-            (agent) => agent.id,
-            (agent) => html`<option
-              value=${agent.id}
-              ?selected=${activeAgentOverrideId === agent.id}
-            >
-              ${agent.name && agent.name !== agent.id ? `${agent.name} (${agent.id})` : agent.id}
-            </option>`,
-          )}
-        </select>
-      </label>
-      ${modelSelect} ${thinkingSelect}
+              switchChatSession(state, next);
+            }}
+          >
+            ${repeat(
+              sessionGroups,
+              (group) => group.id,
+              (group) =>
+                html`<optgroup label=${group.label}>
+                  ${repeat(
+                    group.options,
+                    (entry) => entry.key,
+                    (entry) =>
+                      html`<option
+                        value=${entry.key}
+                        title=${entry.title}
+                        ?selected=${entry.key === state.sessionKey}
+                      >
+                        ${entry.label}
+                      </option>`,
+                  )}
+                </optgroup>`,
+            )}
+          </select>
+        </label>
+        <label class="field chat-controls__session">
+          <span class="chat-controls__field-label">Agent</span>
+          <select
+            .value=${activeAgentOverrideId}
+            title=${`Agent: ${activeAgentId}`}
+            ?disabled=${!state.connected || state.chatSending || Boolean(state.chatRunId)}
+            data-chat-agent-select="true"
+            @change=${(e: Event) => {
+              const nextAgentId =
+                normalizeOptionalString((e.target as HTMLSelectElement).value) ?? null;
+              void (async () => {
+                await patchSession(state, state.sessionKey, { agentId: nextAgentId });
+                await refreshChatAvatar(state);
+                await refreshSlashCommands({
+                  client: state.client,
+                  agentId:
+                    state.sessionsResult?.sessions?.find((row) => row.key === state.sessionKey)
+                      ?.agentId ??
+                    nextAgentId ??
+                    state.agentsList?.defaultId ??
+                    "main",
+                });
+                if (state.agentsPanel === "tools") {
+                  await refreshVisibleToolsEffectiveForCurrentSession(state);
+                }
+              })();
+            }}
+          >
+            <option value="">
+              ${state.agentsList?.defaultId
+                ? `Default agent (${state.agentsList.defaultId})`
+                : "Default agent"}
+            </option>
+            ${repeat(
+              state.agentsList?.agents ?? [],
+              (agent) => agent.id,
+              (agent) => html`<option
+                value=${agent.id}
+                ?selected=${activeAgentOverrideId === agent.id}
+              >
+                ${agent.name && agent.name !== agent.id ? `${agent.name} (${agent.id})` : agent.id}
+              </option>`,
+            )}
+          </select>
+        </label>
+        ${modelSelect} ${thinkingSelect}
+      </div>
     </div>
   `;
 }
@@ -647,6 +655,7 @@ function renderChatModelSelect(state: AppViewState) {
       : (options.find((entry) => entry.value === currentOverride)?.label ?? currentOverride);
   return html`
     <label class="field chat-controls__session chat-controls__model">
+      <span class="chat-controls__field-label">Model</span>
       <select
         data-chat-model-select="true"
         aria-label="Chat model"
@@ -766,6 +775,7 @@ function renderChatThinkingSelect(state: AppViewState) {
       : (options.find((entry) => entry.value === currentOverride)?.label ?? currentOverride);
   return html`
     <label class="field chat-controls__session chat-controls__thinking-select">
+      <span class="chat-controls__field-label">Thinking</span>
       <select
         data-chat-thinking-select="true"
         aria-label="Chat thinking level"

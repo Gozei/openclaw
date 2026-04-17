@@ -1049,47 +1049,58 @@ export function renderApp(state: AppViewState) {
           : nothing}
         ${state.tab === "config"
           ? nothing
-          : html`<section class="content-header">
-              <div>
-                ${isChat
-                  ? renderChatSessionSelect(state)
-                  : html`<div class="page-title">${titleForTab(state.tab)}</div>`}
-                ${isChat ? nothing : html`<div class="page-sub">${subtitleForTab(state.tab)}</div>`}
-              </div>
-              <div class="page-meta">
-                ${state.tab === "dreams"
-                  ? html`
-                      <div class="dreaming-header-controls">
-                        <button
-                          class="btn btn--subtle btn--sm"
-                          ?disabled=${dreamingLoading || state.dreamDiaryLoading}
-                          @click=${refreshDreaming}
-                        >
-                          ${dreamingRefreshLoading
-                            ? t("dreaming.header.refreshing")
-                            : t("dreaming.header.refresh")}
-                        </button>
-                        <button
-                          class="dreams__phase-toggle ${dreamingOn
-                            ? "dreams__phase-toggle--on"
-                            : ""}"
-                          ?disabled=${dreamingLoading}
-                          @click=${() => applyDreamingEnabled(!dreamingOn)}
-                        >
-                          <span class="dreams__phase-toggle-dot"></span>
-                          <span class="dreams__phase-toggle-label">
-                            ${dreamingOn ? t("dreaming.header.on") : t("dreaming.header.off")}
-                          </span>
-                        </button>
-                      </div>
-                    `
-                  : nothing}
-                ${state.lastError
-                  ? html`<div class="pill danger">${state.lastError}</div>`
-                  : nothing}
-                ${isChat ? renderChatControls(state) : nothing}
-              </div>
-            </section>`}
+          : isChat
+            ? html`<section class="content-header content-header--chat">
+                <div class="chat-workspace-header">
+                  <div class="chat-workspace-header__selectors">
+                    ${renderChatSessionSelect(state)}
+                  </div>
+                  <div class="chat-workspace-header__actions">
+                    ${state.lastError
+                      ? html`<div class="pill danger">${state.lastError}</div>`
+                      : nothing}
+                    ${renderChatControls(state)}
+                  </div>
+                </div>
+              </section>`
+            : html`<section class="content-header">
+                <div>
+                  <div class="page-title">${titleForTab(state.tab)}</div>
+                  <div class="page-sub">${subtitleForTab(state.tab)}</div>
+                </div>
+                <div class="page-meta">
+                  ${state.tab === "dreams"
+                    ? html`
+                        <div class="dreaming-header-controls">
+                          <button
+                            class="btn btn--subtle btn--sm"
+                            ?disabled=${dreamingLoading || state.dreamDiaryLoading}
+                            @click=${refreshDreaming}
+                          >
+                            ${dreamingRefreshLoading
+                              ? t("dreaming.header.refreshing")
+                              : t("dreaming.header.refresh")}
+                          </button>
+                          <button
+                            class="dreams__phase-toggle ${dreamingOn
+                              ? "dreams__phase-toggle--on"
+                              : ""}"
+                            ?disabled=${dreamingLoading}
+                            @click=${() => applyDreamingEnabled(!dreamingOn)}
+                          >
+                            <span class="dreams__phase-toggle-dot"></span>
+                            <span class="dreams__phase-toggle-label">
+                              ${dreamingOn ? t("dreaming.header.on") : t("dreaming.header.off")}
+                            </span>
+                          </button>
+                        </div>
+                      `
+                    : nothing}
+                  ${state.lastError
+                    ? html`<div class="pill danger">${state.lastError}</div>`
+                    : nothing}
+                </div>
+              </section>`}
         ${state.tab === "overview"
           ? renderOverview({
               connected: state.connected,

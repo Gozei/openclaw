@@ -42,6 +42,22 @@ type AssistantAttachmentAvailability =
 
 const assistantAttachmentAvailabilityCache = new Map<string, AssistantAttachmentAvailability>();
 const ASSISTANT_ATTACHMENT_UNAVAILABLE_RETRY_MS = 5_000;
+const extractedImagesCache = new WeakMap<object, ImageBlock[]>();
+const groupedMessageBaseCache = new WeakMap<object, GroupedMessageBaseState>();
+const toolCardsCache = new WeakMap<object, Map<string, ToolCard[]>>();
+const jsonDetectionCache = new Map<string, { parsed: unknown; pretty: string } | null>();
+const reasoningMarkdownCache = new Map<string, string>();
+
+type GroupedMessageBaseState = {
+  role: string;
+  normalizedRole: string;
+  isToolResult: boolean;
+  normalizedMessage: NormalizedMessage;
+  images: ImageBlock[];
+  extractedText: string | null;
+  assistantAttachments: Array<Extract<MessageContentItem, { type: "attachment" }>>;
+  assistantViewBlocks: Array<Extract<MessageContentItem, { type: "canvas" }>>;
+};
 
 export function resetAssistantAttachmentAvailabilityCacheForTest() {
   assistantAttachmentAvailabilityCache.clear();
@@ -53,6 +69,12 @@ type ImageBlock = {
 };
 
 function extractImages(message: unknown): ImageBlock[] {
+  if (message && typeof message === "object") {
+    const cached = extractedImagesCache.get(message);
+    if (cached) {
+      return cached;
+    }
+  }
   const m = message as Record<string, unknown>;
   const content = m.content;
   const images: ImageBlock[] = [];
@@ -86,7 +108,78 @@ function extractImages(message: unknown): ImageBlock[] {
     }
   }
 
+  if (message && typeof message === "object") {
+    extractedImagesCache.set(message, images);
+  }
   return images;
+}
+
+function getGroupedMessageBaseState(message: unknown): GroupedMessageBaseState {
+  if (message && typeof message === "object") {
+    const cached = groupedMessageBaseCache.get(message);
+    if (cached) {
+      return cached;
+    }
+  }
+
+  const m = message as Record<string, unknown>;
+  const role = typeof m.role === "string" ? m.role : "unknown";
+  const normalizedRole = normalizeRoleForGrouping(role);
+  const isToolResult =
+    isToolResultMessage(message) ||
+    role.toLowerCase() === "toolresult" ||
+    role.toLowerCase() === "tool_result" ||
+    typeof m.toolCallId === "string" ||
+    typeof m.tool_call_id === "string";
+  const normalizedMessage = normalizeMessage(message);
+  const extractedText = normalizedMessage.content
+    .reduce<string[]>((lines, item) => {
+      if (item.type === "text" && typeof item.text === "string") {
+        lines.push(item.text);
+      }
+      return lines;
+    }, [])
+    .join("\n")
+    .trim();
+  const baseState: GroupedMessageBaseState = {
+    role,
+    normalizedRole,
+    isToolResult,
+    normalizedMessage,
+    images: extractImages(message),
+    extractedText: extractedText || null,
+    assistantAttachments: normalizedMessage.content.filter(
+      (item): item is Extract<MessageContentItem, { type: "attachment" }> =>
+        item.type === "attachment",
+    ),
+    assistantViewBlocks: normalizedMessage.content.filter(
+      (item): item is Extract<MessageContentItem, { type: "canvas" }> => item.type === "canvas",
+    ),
+  };
+
+  if (message && typeof message === "object") {
+    groupedMessageBaseCache.set(message, baseState);
+  }
+  return baseState;
+}
+
+function getCachedToolCards(message: unknown, prefix: string): ToolCard[] {
+  if (!message || typeof message !== "object") {
+    return extractToolCards(message, prefix);
+  }
+  const cacheKey = message;
+  let prefixCache = toolCardsCache.get(cacheKey);
+  if (!prefixCache) {
+    prefixCache = new Map();
+    toolCardsCache.set(cacheKey, prefixCache);
+  }
+  const cached = prefixCache.get(prefix);
+  if (cached) {
+    return cached;
+  }
+  const cards = extractToolCards(message, prefix);
+  prefixCache.set(prefix, cards);
+  return cards;
 }
 
 export function renderReadingIndicatorGroup(assistant?: AssistantIdentity, basePath?: string) {
@@ -981,21 +1074,30 @@ const MAX_JSON_AUTOPARSE_CHARS = 20_000;
  * Size-capped to prevent render-loop DoS from large JSON messages.
  */
 function detectJson(text: string): { parsed: unknown; pretty: string } | null {
+  const cached = jsonDetectionCache.get(text);
+  if (cached !== undefined) {
+    return cached;
+  }
   const t = text.trim();
 
   // Enforce size cap to prevent UI freeze from multi-MB JSON payloads
   if (t.length > MAX_JSON_AUTOPARSE_CHARS) {
+    jsonDetectionCache.set(text, null);
     return null;
   }
 
   if ((t.startsWith("{") && t.endsWith("}")) || (t.startsWith("[") && t.endsWith("]"))) {
     try {
       const parsed = JSON.parse(t);
-      return { parsed, pretty: JSON.stringify(parsed, null, 2) };
+      const result = { parsed, pretty: JSON.stringify(parsed, null, 2) };
+      jsonDetectionCache.set(text, result);
+      return result;
     } catch {
+      jsonDetectionCache.set(text, null);
       return null;
     }
   }
+  jsonDetectionCache.set(text, null);
   return null;
 }
 
@@ -1012,6 +1114,16 @@ function jsonSummaryLabel(parsed: unknown): string {
     return `Object (${keys.length} keys)`;
   }
   return "JSON";
+}
+
+function getCachedReasoningMarkdown(text: string): string {
+  const cached = reasoningMarkdownCache.get(text);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const markdown = formatReasoningMarkdown(text);
+  reasoningMarkdownCache.set(text, markdown);
+  return markdown;
 }
 
 function renderExpandButton(markdown: string, onOpenSidebar: (content: SidebarContent) => void) {
@@ -1050,42 +1162,25 @@ function renderGroupedMessage(
   },
   onOpenSidebar?: (content: SidebarContent) => void,
 ) {
-  const m = message as Record<string, unknown>;
-  const role = typeof m.role === "string" ? m.role : "unknown";
-  const normalizedRole = normalizeRoleForGrouping(role);
-  const isToolResult =
-    isToolResultMessage(message) ||
-    role.toLowerCase() === "toolresult" ||
-    role.toLowerCase() === "tool_result" ||
-    typeof m.toolCallId === "string" ||
-    typeof m.tool_call_id === "string";
-
-  const toolCards = (opts.showToolCalls ?? true) ? extractToolCards(message, messageKey) : [];
+  const {
+    role,
+    normalizedRole,
+    isToolResult,
+    normalizedMessage,
+    images,
+    extractedText,
+    assistantAttachments,
+    assistantViewBlocks,
+  } = getGroupedMessageBaseState(message);
+  const toolCards = (opts.showToolCalls ?? true) ? getCachedToolCards(message, messageKey) : [];
   const hasToolCards = toolCards.length > 0;
-  const images = extractImages(message);
   const hasImages = images.length > 0;
-
-  const normalizedMessage = normalizeMessage(message);
-  const extractedText = normalizedMessage.content
-    .reduce<string[]>((lines, item) => {
-      if (item.type === "text" && typeof item.text === "string") {
-        lines.push(item.text);
-      }
-      return lines;
-    }, [])
-    .join("\n")
-    .trim();
-  const assistantAttachments = normalizedMessage.content.filter(
-    (item): item is Extract<MessageContentItem, { type: "attachment" }> =>
-      item.type === "attachment",
-  );
-  const assistantViewBlocks = normalizedMessage.content.filter(
-    (item): item is Extract<MessageContentItem, { type: "canvas" }> => item.type === "canvas",
-  );
   const extractedThinking =
     opts.showReasoning && role === "assistant" ? extractThinkingCached(message) : null;
   const markdownBase = extractedText?.trim() ? extractedText : null;
-  const reasoningMarkdown = extractedThinking ? formatReasoningMarkdown(extractedThinking) : null;
+  const reasoningMarkdown = extractedThinking
+    ? getCachedReasoningMarkdown(extractedThinking)
+    : null;
   const markdown = markdownBase;
   const canCopyMarkdown = role === "assistant" && Boolean(markdown?.trim());
   const canExpand = role === "assistant" && Boolean(onOpenSidebar && markdown?.trim());
