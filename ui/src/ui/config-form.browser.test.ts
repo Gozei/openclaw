@@ -161,6 +161,271 @@ describe("config form renderer", () => {
     expect(onPatch).toHaveBeenCalledWith(["slack"], {});
   });
 
+  it("renders a models summary with primary model and configured providers", () => {
+    const onPatch = vi.fn();
+    const container = document.createElement("div");
+    const schema = {
+      type: "object",
+      properties: {
+        agents: {
+          type: "object",
+          properties: {
+            defaults: {
+              type: "object",
+              properties: {
+                model: {
+                  type: "object",
+                  properties: {
+                    primary: { type: "string" },
+                    fallbacks: { type: "array", items: { type: "string" } },
+                  },
+                },
+              },
+            },
+          },
+        },
+        models: {
+          type: "object",
+          properties: {
+            providers: {
+              type: "object",
+              additionalProperties: {
+                type: "object",
+                properties: {
+                  baseUrl: { type: "string" },
+                  models: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        id: { type: "string" },
+                        name: { type: "string" },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+    const analysis = analyzeConfigSchema(schema);
+    render(
+      renderConfigForm({
+        schema: analysis.schema,
+        uiHints: {},
+        unsupportedPaths: analysis.unsupportedPaths,
+        value: {
+          agents: {
+            defaults: {
+              model: {
+                primary: "custom-custom27/qwen3.5-plus",
+                fallbacks: ["openai-codex/gpt-5.4"],
+              },
+            },
+          },
+          models: {
+            providers: {
+              "custom-custom27": {
+                baseUrl: "https://agentrs.jd.com/api/saas/openai-u/v1",
+                models: [{ id: "qwen3.5-plus", name: "qwen3.5-plus" }],
+              },
+            },
+          },
+        },
+        activeSection: "models",
+        onPatch,
+      }),
+      container,
+    );
+
+    expect(container.textContent).toContain("Configured Model Summary");
+    expect(container.textContent).toContain("custom-custom27/qwen3.5-plus");
+    expect(container.textContent).toContain("openai-codex/gpt-5.4");
+    expect(container.textContent).toContain("custom-custom27");
+    expect(container.textContent).toContain("https://agentrs.jd.com/api/saas/openai-u/v1");
+    expect(container.textContent).toContain("qwen3.5-plus");
+  });
+
+  it("uses provider-specific map copy for model providers", () => {
+    const onPatch = vi.fn();
+    const container = document.createElement("div");
+    const schema = {
+      type: "object",
+      properties: {
+        models: {
+          type: "object",
+          properties: {
+            providers: {
+              type: "object",
+              additionalProperties: {
+                type: "object",
+                properties: {
+                  baseUrl: { type: "string" },
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+    const analysis = analyzeConfigSchema(schema);
+    render(
+      renderConfigForm({
+        schema: analysis.schema,
+        uiHints: {},
+        unsupportedPaths: analysis.unsupportedPaths,
+        value: {
+          models: {
+            providers: {
+              "custom-custom27": {
+                baseUrl: "https://agentrs.jd.com/api/saas/openai-u/v1",
+              },
+            },
+          },
+        },
+        activeSection: "models",
+        onPatch,
+      }),
+      container,
+    );
+
+    expect(container.textContent).toContain("Providers");
+    expect(container.textContent).toContain("Add Provider");
+    expect(container.textContent).toContain(
+      "configure its base URL, auth, and available model IDs",
+    );
+    const keyInput = Array.from(container.querySelectorAll<HTMLInputElement>("input")).find(
+      (input) => input.placeholder === "Provider ID",
+    );
+    expect(keyInput).not.toBeUndefined();
+  });
+
+  it("collapses advanced model settings behind a disclosure by default", () => {
+    const onPatch = vi.fn();
+    const container = document.createElement("div");
+    const schema = {
+      type: "object",
+      properties: {
+        agents: {
+          type: "object",
+          properties: {
+            defaults: {
+              type: "object",
+              properties: {
+                model: {
+                  type: "object",
+                  properties: {
+                    primary: { type: "string" },
+                  },
+                },
+              },
+            },
+          },
+        },
+        models: {
+          type: "object",
+          properties: {
+            providers: {
+              type: "object",
+              additionalProperties: {
+                type: "object",
+                properties: {
+                  baseUrl: { type: "string" },
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+    const analysis = analyzeConfigSchema(schema);
+    render(
+      renderConfigForm({
+        schema: analysis.schema,
+        uiHints: {},
+        unsupportedPaths: analysis.unsupportedPaths,
+        value: {
+          agents: {
+            defaults: {
+              model: {
+                primary: "custom-custom27/qwen3.5-plus",
+              },
+            },
+          },
+          models: {
+            providers: {
+              "custom-custom27": {
+                baseUrl: "https://agentrs.jd.com/api/saas/openai-u/v1",
+              },
+            },
+          },
+        },
+        activeSection: "models",
+        onPatch,
+      }),
+      container,
+    );
+
+    expect(container.textContent).toContain("Most model setup happens in three places");
+    expect(container.textContent).toContain("Show full model settings");
+    const disclosure = container.querySelector<HTMLDetailsElement>(
+      "#config-section-models .config-section-advanced",
+    );
+    expect(disclosure).not.toBeNull();
+    expect(disclosure?.open).toBe(false);
+  });
+
+  it("shows model subsection content directly when a subsection is focused", () => {
+    const onPatch = vi.fn();
+    const container = document.createElement("div");
+    const schema = {
+      type: "object",
+      properties: {
+        models: {
+          type: "object",
+          properties: {
+            providers: {
+              type: "object",
+              additionalProperties: {
+                type: "object",
+                properties: {
+                  baseUrl: { type: "string" },
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+    const analysis = analyzeConfigSchema(schema);
+    render(
+      renderConfigForm({
+        schema: analysis.schema,
+        uiHints: {},
+        unsupportedPaths: analysis.unsupportedPaths,
+        value: {
+          models: {
+            providers: {
+              "custom-custom27": {
+                baseUrl: "https://agentrs.jd.com/api/saas/openai-u/v1",
+              },
+            },
+          },
+        },
+        activeSection: "models",
+        activeSubsection: "providers",
+        onPatch,
+      }),
+      container,
+    );
+
+    expect(container.querySelector(".config-section-advanced")).toBeNull();
+    expect(container.textContent).toContain("Providers");
+    expect(container.textContent).toContain("Add Provider");
+  });
+
   it("supports wildcard uiHints for map entries", () => {
     const onPatch = vi.fn();
     const container = document.createElement("div");

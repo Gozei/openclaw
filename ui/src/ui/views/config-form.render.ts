@@ -324,6 +324,163 @@ export const SECTION_META: Record<string, { label: string; description: string }
   mcp: { label: "MCP", description: "Model Context Protocol server definitions" },
 };
 
+function normalizeConfigString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function resolveModelConfigPrimary(modelConfig: unknown): string | null {
+  if (typeof modelConfig === "string") {
+    return normalizeConfigString(modelConfig);
+  }
+  if (!modelConfig || typeof modelConfig !== "object" || Array.isArray(modelConfig)) {
+    return null;
+  }
+  return normalizeConfigString((modelConfig as { primary?: unknown }).primary);
+}
+
+function resolveModelConfigFallbacks(modelConfig: unknown): string[] {
+  if (!modelConfig || typeof modelConfig !== "object" || Array.isArray(modelConfig)) {
+    return [];
+  }
+  const fallbacks = (modelConfig as { fallbacks?: unknown }).fallbacks;
+  if (!Array.isArray(fallbacks)) {
+    return [];
+  }
+  return fallbacks
+    .map((entry) => normalizeConfigString(entry))
+    .filter((entry): entry is string => Boolean(entry));
+}
+
+function renderModelsSummary(params: {
+  rootValue: Record<string, unknown> | null;
+  sectionValue: unknown;
+}) {
+  const defaults =
+    (params.rootValue as { agents?: { defaults?: { model?: unknown } } } | null)?.agents
+      ?.defaults ?? null;
+  const primary = resolveModelConfigPrimary(defaults?.model);
+  const fallbacks = resolveModelConfigFallbacks(defaults?.model);
+  const providersRecord =
+    params.sectionValue &&
+    typeof params.sectionValue === "object" &&
+    !Array.isArray(params.sectionValue) &&
+    (params.sectionValue as { providers?: unknown }).providers &&
+    typeof (params.sectionValue as { providers?: unknown }).providers === "object" &&
+    !Array.isArray((params.sectionValue as { providers?: unknown }).providers)
+      ? ((params.sectionValue as { providers?: unknown }).providers as Record<string, unknown>)
+      : null;
+  const providerEntries = providersRecord ? Object.entries(providersRecord) : [];
+  if (!primary && fallbacks.length === 0 && providerEntries.length === 0) {
+    return nothing;
+  }
+  return html`
+    <div class="config-summary-card">
+      <div class="config-summary-card__title">Configured Model Summary</div>
+      <div class="config-summary-grid">
+        <div class="config-summary-item">
+          <div class="config-summary-item__label">Primary</div>
+          <div class="config-summary-item__value mono">${primary ?? "Not set"}</div>
+        </div>
+        <div class="config-summary-item">
+          <div class="config-summary-item__label">Fallbacks</div>
+          <div class="config-summary-item__value">
+            ${fallbacks.length > 0 ? fallbacks.join(", ") : "None"}
+          </div>
+        </div>
+        <div class="config-summary-item">
+          <div class="config-summary-item__label">Providers</div>
+          <div class="config-summary-item__value">${providerEntries.length}</div>
+        </div>
+      </div>
+      ${providerEntries.length > 0
+        ? html`
+            <div class="config-summary-provider-list">
+              ${providerEntries.map(([providerId, providerValue]) => {
+                const provider =
+                  providerValue &&
+                  typeof providerValue === "object" &&
+                  !Array.isArray(providerValue)
+                    ? (providerValue as { baseUrl?: unknown; models?: unknown })
+                    : null;
+                const baseUrl = normalizeConfigString(provider?.baseUrl);
+                const modelIds = Array.isArray(provider?.models)
+                  ? provider.models
+                      .map((entry) => {
+                        if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+                          return null;
+                        }
+                        const typed = entry as { id?: unknown; name?: unknown };
+                        return normalizeConfigString(typed.id) ?? normalizeConfigString(typed.name);
+                      })
+                      .filter((entry): entry is string => Boolean(entry))
+                  : [];
+                return html`
+                  <div class="config-summary-provider">
+                    <div class="config-summary-provider__header">
+                      <div class="config-summary-provider__id mono">${providerId}</div>
+                      <div class="config-summary-provider__count">
+                        ${modelIds.length} model${modelIds.length === 1 ? "" : "s"}
+                      </div>
+                    </div>
+                    ${baseUrl
+                      ? html`
+                          <div class="config-summary-provider__meta">
+                            <span class="config-summary-provider__meta-label">Base URL</span>
+                            <span class="mono">${baseUrl}</span>
+                          </div>
+                        `
+                      : nothing}
+                    ${modelIds.length > 0
+                      ? html`
+                          <div class="config-summary-provider__meta">
+                            <span class="config-summary-provider__meta-label">Models</span>
+                            <span class="mono">${modelIds.join(", ")}</span>
+                          </div>
+                        `
+                      : nothing}
+                  </div>
+                `;
+              })}
+            </div>
+          `
+        : nothing}
+    </div>
+  `;
+}
+
+function renderModelsSetupGuide() {
+  return html`
+    <div class="config-task-guide">
+      <div class="config-task-guide__title">Most model setup happens in three places</div>
+      <div class="config-task-guide__steps">
+        <div class="config-task-guide__step">
+          <span class="config-task-guide__step-index">1</span>
+          <div class="config-task-guide__step-copy">
+            <div class="config-task-guide__step-label">Choose the active model</div>
+            <div class="config-task-guide__step-text">
+              Agents &gt; Defaults &gt; Model &gt; Primary
+            </div>
+          </div>
+        </div>
+        <div class="config-task-guide__step">
+          <span class="config-task-guide__step-index">2</span>
+          <div class="config-task-guide__step-copy">
+            <div class="config-task-guide__step-label">Configure provider endpoints</div>
+            <div class="config-task-guide__step-text">Models &gt; Providers</div>
+          </div>
+        </div>
+        <div class="config-task-guide__step">
+          <span class="config-task-guide__step-index">3</span>
+          <div class="config-task-guide__step-copy">
+            <div class="config-task-guide__step-label">Add credentials if needed</div>
+            <div class="config-task-guide__step-text">Auth or your provider secret settings</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 function getSectionIcon(key: string) {
   return sectionIcons[key as keyof typeof sectionIcons] ?? sectionIcons.default;
 }
@@ -441,36 +598,62 @@ export function renderConfigForm(props: ConfigFormProps) {
     node: JsonSchema;
     nodeValue: unknown;
     path: Array<string | number>;
-  }) => html`
-    <section class="config-section-card" id=${params.id}>
-      <div class="config-section-card__header">
-        <span class="config-section-card__icon">${getSectionIcon(params.sectionKey)}</span>
-        <div class="config-section-card__titles">
-          <h3 class="config-section-card__title">${params.label}</h3>
-          ${params.description
-            ? html`<p class="config-section-card__desc">${params.description}</p>`
-            : nothing}
+  }) => {
+    const shouldCollapseAdvanced =
+      params.sectionKey === "models" && params.path.length === 1 && !searchQuery;
+    const nodeContent = renderNode({
+      schema: params.node,
+      value: params.nodeValue,
+      path: params.path,
+      hints: props.uiHints,
+      rawAvailable: props.rawAvailable ?? true,
+      unsupported,
+      disabled: props.disabled ?? false,
+      showLabel: false,
+      searchCriteria,
+      revealSensitive: props.revealSensitive ?? false,
+      isSensitivePathRevealed: props.isSensitivePathRevealed,
+      onToggleSensitivePath: props.onToggleSensitivePath,
+      onPatch: props.onPatch,
+    });
+
+    return html`
+      <section class="config-section-card" id=${params.id}>
+        <div class="config-section-card__header">
+          <span class="config-section-card__icon">${getSectionIcon(params.sectionKey)}</span>
+          <div class="config-section-card__titles">
+            <h3 class="config-section-card__title">${params.label}</h3>
+            ${params.description
+              ? html`<p class="config-section-card__desc">${params.description}</p>`
+              : nothing}
+          </div>
         </div>
-      </div>
-      <div class="config-section-card__content">
-        ${renderNode({
-          schema: params.node,
-          value: params.nodeValue,
-          path: params.path,
-          hints: props.uiHints,
-          rawAvailable: props.rawAvailable ?? true,
-          unsupported,
-          disabled: props.disabled ?? false,
-          showLabel: false,
-          searchCriteria,
-          revealSensitive: props.revealSensitive ?? false,
-          isSensitivePathRevealed: props.isSensitivePathRevealed,
-          onToggleSensitivePath: props.onToggleSensitivePath,
-          onPatch: props.onPatch,
-        })}
-      </div>
-    </section>
-  `;
+        <div class="config-section-card__content">
+          ${params.sectionKey === "models"
+            ? html`
+                ${renderModelsSummary({ rootValue: value, sectionValue: params.nodeValue })}
+                ${renderModelsSetupGuide()}
+              `
+            : nothing}
+          ${shouldCollapseAdvanced
+            ? html`
+                <details class="config-section-advanced">
+                  <summary class="config-section-advanced__summary">
+                    <span class="config-section-advanced__summary-label"
+                      >Show full model settings</span
+                    >
+                    <span class="config-section-advanced__summary-meta"
+                      >Advanced fields, provider details, and fallback configuration</span
+                    >
+                  </summary>
+                  <div class="config-section-advanced__content">${nodeContent}</div>
+                </details>
+              `
+            : nodeContent}
+        </div>
+      </section>
+    `;
+  };
 
   return html`
     <div class="config-form config-form--modern">

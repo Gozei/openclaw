@@ -131,6 +131,16 @@ type FieldMeta = {
   tags: string[];
 };
 
+type MapUiCopy = {
+  emptyLabel: string;
+  addLabel: string;
+  help?: string;
+  keyPlaceholder: string;
+  removeLabel: string;
+  defaultKeyPrefix: string;
+  sectionLabel: string;
+};
+
 function isSecretRefObject(value: unknown): value is {
   source: string;
   id: string;
@@ -273,6 +283,34 @@ function resolveFieldMeta(
     label,
     help,
     tags: hintTags.length > 0 ? hintTags : schemaTags,
+  };
+}
+
+function resolveMapUiCopy(
+  path: Array<string | number>,
+  schema: JsonSchema,
+  hints: ConfigUiHints,
+): MapUiCopy {
+  const { label } = resolveFieldMeta(path, schema, hints);
+  const key = pathKey(path);
+  if (key === "models.providers") {
+    return {
+      sectionLabel: "Providers",
+      addLabel: "Add Provider",
+      help: "Add a provider ID, then configure its base URL, auth, and available model IDs.",
+      emptyLabel: "No providers configured.",
+      keyPlaceholder: "Provider ID",
+      removeLabel: "Remove provider",
+      defaultKeyPrefix: "provider",
+    };
+  }
+  return {
+    sectionLabel: `${label} entries`,
+    addLabel: "Add Entry",
+    emptyLabel: `No ${label.toLowerCase()} entries.`,
+    keyPlaceholder: "Key",
+    removeLabel: "Remove entry",
+    defaultKeyPrefix: "custom",
   };
 }
 
@@ -1200,6 +1238,7 @@ function renderMapField(params: {
     onToggleSensitivePath,
   } = params;
   const anySchema = isAnySchema(schema);
+  const mapUiCopy = resolveMapUiCopy(path, schema, hints);
   const entries = Object.entries(value ?? {}).filter(([key]) => !reservedKeys.has(key));
   const visibleEntries =
     searchCriteria && hasSearchCriteria(searchCriteria)
@@ -1217,7 +1256,10 @@ function renderMapField(params: {
   return html`
     <div class="cfg-map">
       <div class="cfg-map__header">
-        <span class="cfg-map__label">Custom entries</span>
+        <div class="cfg-map__header-copy">
+          <span class="cfg-map__label">${mapUiCopy.sectionLabel}</span>
+          ${mapUiCopy.help ? html`<span class="cfg-map__help">${mapUiCopy.help}</span>` : nothing}
+        </div>
         <button
           type="button"
           class="cfg-map__add"
@@ -1225,22 +1267,22 @@ function renderMapField(params: {
           @click=${() => {
             const next = { ...value };
             let index = 1;
-            let key = `custom-${index}`;
+            let key = `${mapUiCopy.defaultKeyPrefix}-${index}`;
             while (key in next) {
               index += 1;
-              key = `custom-${index}`;
+              key = `${mapUiCopy.defaultKeyPrefix}-${index}`;
             }
             next[key] = anySchema ? {} : defaultValue(schema);
             onPatch(path, next);
           }}
         >
           <span class="cfg-map__add-icon">${icons.plus}</span>
-          Add Entry
+          ${mapUiCopy.addLabel}
         </button>
       </div>
 
       ${visibleEntries.length === 0
-        ? html` <div class="cfg-map__empty">No custom entries.</div> `
+        ? html` <div class="cfg-map__empty">${mapUiCopy.emptyLabel}</div> `
         : html`
             <div class="cfg-map__items">
               ${visibleEntries.map(([key, entryValue]) => {
@@ -1260,7 +1302,7 @@ function renderMapField(params: {
                         <input
                           type="text"
                           class="cfg-input cfg-input--sm"
-                          placeholder="Key"
+                          placeholder=${mapUiCopy.keyPlaceholder}
                           .value=${key}
                           ?disabled=${disabled}
                           @change=${(e: Event) => {
@@ -1281,7 +1323,8 @@ function renderMapField(params: {
                       <button
                         type="button"
                         class="cfg-map__item-remove"
-                        title="Remove entry"
+                        title=${mapUiCopy.removeLabel}
+                        aria-label=${mapUiCopy.removeLabel}
                         ?disabled=${disabled}
                         @click=${() => {
                           const next = { ...value };

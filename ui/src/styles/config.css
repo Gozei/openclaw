@@ -832,6 +832,192 @@
   min-width: 0;
 }
 
+.config-summary-card {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--panel-2) 88%, transparent), var(--panel));
+}
+
+.config-summary-card__title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.config-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.config-summary-item {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--panel) 86%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-color) 78%, transparent);
+}
+
+.config-summary-item__label,
+.config-summary-provider__meta-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.config-summary-item__value {
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.config-summary-provider-list {
+  display: grid;
+  gap: 10px;
+}
+
+.config-summary-provider {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-color) 75%, transparent);
+}
+
+.config-summary-provider__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.config-summary-provider__id {
+  font-size: 13px;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.config-summary-provider__count {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.config-summary-provider__meta {
+  display: grid;
+  gap: 4px;
+}
+
+.config-task-guide {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--accent) 16%, var(--border-color));
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent) 4%, var(--panel)), var(--panel));
+}
+
+.config-task-guide__title {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.config-task-guide__steps {
+  display: grid;
+  gap: 10px;
+}
+
+.config-task-guide__step {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: start;
+}
+
+.config-task-guide__step-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.config-task-guide__step-copy {
+  display: grid;
+  gap: 3px;
+}
+
+.config-task-guide__step-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.config-task-guide__step-text {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.config-section-advanced {
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  overflow: hidden;
+}
+
+.config-section-advanced__summary {
+  display: grid;
+  gap: 4px;
+  padding: 14px 16px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.config-section-advanced__summary::-webkit-details-marker {
+  display: none;
+}
+
+.config-section-advanced__summary-label {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.config-section-advanced__summary-meta {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.config-section-advanced[open] .config-section-advanced__summary {
+  border-bottom: 1px solid var(--border-color);
+}
+
+.config-section-advanced__content {
+  padding: 14px 16px 16px;
+}
+
 /* Staggered entrance for sequential cards */
 .config-form--modern .config-section-card:nth-child(1) {
   animation-delay: 0ms;
@@ -1574,10 +1760,22 @@
   background: var(--bg-hover);
 }
 
+.cfg-map__header-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
 .cfg-map__label {
   font-size: 13px;
   font-weight: 600;
   color: var(--muted);
+}
+
+.cfg-map__help {
+  font-size: 12px;
+  color: var(--muted-strong);
+  line-height: 1.4;
 }
 
 .cfg-map__add {
