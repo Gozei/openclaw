@@ -20,15 +20,22 @@ installGatewayTestHooks({ scope: "suite" });
 
 const cleanupDirs: string[] = [];
 let harness: Awaited<ReturnType<typeof createGatewaySuiteHarness>>;
+let subscribedOperatorWs:
+  | Awaited<ReturnType<Awaited<ReturnType<typeof createGatewaySuiteHarness>>["openWs"]>>
+  | undefined;
 let previousMinimalGateway: string | undefined;
 
 beforeAll(async () => {
   previousMinimalGateway = process.env.OPENCLAW_TEST_MINIMAL_GATEWAY;
   delete process.env.OPENCLAW_TEST_MINIMAL_GATEWAY;
   harness = await createGatewaySuiteHarness();
+  subscribedOperatorWs = await harness.openWs();
+  await connectOk(subscribedOperatorWs, { scopes: ["operator.read"] });
+  await rpcReq(subscribedOperatorWs, "sessions.subscribe");
 });
 
 afterAll(async () => {
+  subscribedOperatorWs?.close();
   await harness.close();
   if (previousMinimalGateway === undefined) {
     delete process.env.OPENCLAW_TEST_MINIMAL_GATEWAY;
@@ -52,17 +59,12 @@ async function createSessionStoreFile(): Promise<string> {
 }
 
 async function withOperatorSessionSubscriber<T>(
-  harness: Awaited<ReturnType<typeof createGatewaySuiteHarness>>,
-  run: (ws: Awaited<ReturnType<typeof harness.openWs>>) => Promise<T>,
+  run: (ws: NonNullable<typeof subscribedOperatorWs>) => Promise<T>,
 ) {
-  const ws = await harness.openWs();
-  try {
-    await connectOk(ws, { scopes: ["operator.read"] });
-    await rpcReq(ws, "sessions.subscribe");
-    return await run(ws);
-  } finally {
-    ws.close();
+  if (!subscribedOperatorWs) {
+    throw new Error("subscribed operator websocket is not ready");
   }
+  return await run(subscribedOperatorWs);
 }
 
 function waitForSessionMessageEvent(
@@ -157,7 +159,7 @@ describe("session.message websocket events", () => {
       storePath,
     });
 
-    await withOperatorSessionSubscriber(harness, async (ws) => {
+    await withOperatorSessionSubscriber(async (ws) => {
       const changedEvent = onceMessage(
         ws,
         (message) =>
@@ -216,7 +218,7 @@ describe("session.message websocket events", () => {
       "utf-8",
     );
 
-    await withOperatorSessionSubscriber(harness, async (ws) => {
+    await withOperatorSessionSubscriber(async (ws) => {
       const lifecycleEventPromise = onceMessage(
         ws,
         (message) =>
@@ -409,7 +411,7 @@ describe("session.message websocket events", () => {
       "utf-8",
     );
 
-    await withOperatorSessionSubscriber(harness, async (ws) => {
+    await withOperatorSessionSubscriber(async (ws) => {
       const { messageEvent, changedEvent } = await emitTranscriptUpdateAndCollectEvents({
         ws,
         sessionKey: "agent:main:main",
@@ -569,7 +571,7 @@ describe("session.message websocket events", () => {
       "utf-8",
     );
 
-    await withOperatorSessionSubscriber(harness, async (ws) => {
+    await withOperatorSessionSubscriber(async (ws) => {
       const { messageEvent, changedEvent } = await emitTranscriptUpdateAndCollectEvents({
         ws,
         sessionKey: "agent:main:main",
@@ -718,7 +720,7 @@ describe("session.message websocket events", () => {
       "utf-8",
     );
 
-    await withOperatorSessionSubscriber(harness, async (ws) => {
+    await withOperatorSessionSubscriber(async (ws) => {
       const messageEventPromise = waitForSessionMessageEvent(ws, "agent:main:newer");
 
       emitSessionTranscriptUpdate({

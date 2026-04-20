@@ -1115,6 +1115,7 @@ export function renderApp(state: AppViewState) {
               cronNext,
               lastChannelsRefresh: state.channelsLastSuccess,
               warnQueryToken,
+              modelAuthStatus: state.modelAuthStatusResult,
               usageResult: state.usageResult,
               sessionsResult: state.sessionsResult,
               skillsReport: state.skillsReport,
@@ -1149,9 +1150,9 @@ export function renderApp(state: AppViewState) {
                 state.overviewShowGatewayPassword = !state.overviewShowGatewayPassword;
               },
               onConnect: () => state.connect(),
-              onRefresh: () => state.loadOverview(),
+              onRefresh: () => state.loadOverview({ refresh: true }),
               onNavigate: (tab) => state.setTab(tab as import("./navigation.ts").Tab),
-              onRefreshLogs: () => state.loadOverview(),
+              onRefreshLogs: () => state.loadOverview({ refresh: true }),
             })
           : nothing}
         ${state.tab === "channels"

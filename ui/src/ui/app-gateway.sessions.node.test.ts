@@ -245,12 +245,11 @@ describe("handleGatewayEvent session.message", () => {
     expect(loadChatHistoryMock).toHaveBeenCalledWith(host);
   });
 
-  it("does not reload history while the current run is still live", () => {
+  it("skips history reload while a chat run is active", () => {
     loadChatHistoryMock.mockReset();
     const host = createHost();
     host.sessionKey = "agent:qa:main";
-    host.chatRunId = "run-1";
-    host.chatStream = "";
+    host.chatRunId = "run-123";
 
     handleGatewayEvent(host, {
       type: "event",
@@ -266,6 +265,10 @@ describe("handleGatewayEvent session.message", () => {
     });
 
     expect(loadChatHistoryMock).not.toHaveBeenCalled();
+    expect(
+      (host as TestGatewayHost & { pendingSessionMessageReloadSessionKey?: string | null })
+        .pendingSessionMessageReloadSessionKey,
+    ).toBe("agent:qa:main");
   });
 
   it("does not reload history when the transcript event matches the already-rendered last message", () => {
@@ -435,7 +438,6 @@ describe("handleGatewayEvent session.message", () => {
     expect(loadChatHistoryMock).toHaveBeenCalledTimes(1);
     expect(loadChatHistoryMock).toHaveBeenCalledWith(host);
   });
-
   it("ignores transcript updates for other sessions", () => {
     loadChatHistoryMock.mockReset();
     const host = createHost();
