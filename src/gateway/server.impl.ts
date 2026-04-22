@@ -23,6 +23,7 @@ import { ensureOpenClawCliOnPath } from "../infra/path-env.js";
 import { setGatewaySigusr1RestartPolicy, setPreRestartDeferralCheck } from "../infra/restart.js";
 import { enqueueSystemEvent } from "../infra/system-events.js";
 import { startDiagnosticHeartbeat, stopDiagnosticHeartbeat } from "../logging/diagnostic.js";
+import { startRuntimeSampler, type RuntimeSamplerHandle } from "../logging/runtime-sampler.js";
 import { createSubsystemLogger, runtimeForLogger } from "../logging/subsystem.js";
 import { runGlobalGatewayStopSafely } from "../plugins/hook-runner-global.js";
 import { createPluginRuntime } from "../plugins/runtime/index.js";
@@ -401,6 +402,7 @@ export async function startGatewayServer(
   const deps = createDefaultDeps();
   let runtimeState: GatewayServerLiveState | null = null;
   let canvasHostServer: CanvasHostServer | null = null;
+  let runtimeSampler: RuntimeSamplerHandle | null = null;
   const gatewayTls = await loadGatewayTlsRuntime(cfgAtStart.gateway?.tls, log.child("tls"));
   if (cfgAtStart.gateway?.tls?.enabled && !gatewayTls.enabled) {
     throw new Error(gatewayTls.error ?? "gateway tls: failed to enable");
@@ -502,6 +504,7 @@ export async function startGatewayServer(
   const runClosePrelude = async () =>
     await runGatewayClosePrelude({
       ...(diagnosticsEnabled ? { stopDiagnostics: stopDiagnosticHeartbeat } : {}),
+      ...(runtimeSampler ? { stopRuntimeSampler: () => runtimeSampler?.stop() } : {}),
       clearSkillsRefreshTimer: () => {
         if (!runtimeState?.skillsRefreshTimer) {
           return;
@@ -812,6 +815,11 @@ export async function startGatewayServer(
       resolveSharedGatewaySessionGenerationForConfig,
       sharedGatewaySessionGenerationState,
       clients,
+    });
+
+    runtimeSampler = startRuntimeSampler({
+      getActiveAgentRuns: () => getActiveEmbeddedRunCount(),
+      getQueueSize: () => getTotalQueueSize(),
     });
   } catch (err) {
     await closeOnStartupFailure();

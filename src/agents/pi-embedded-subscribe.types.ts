@@ -12,6 +12,8 @@ export type { BlockReplyChunking, ToolResultFormat } from "./pi-embedded-subscri
 export type SubscribeEmbeddedPiSessionParams = {
   session: AgentSession;
   runId: string;
+  /** Timestamp captured immediately before the model stream begins for first-token latency. */
+  firstTokenStartedAtMs?: number;
   initialReplayState?: EmbeddedRunReplayState;
   hookRunner?: HookRunner;
   verboseLevel?: VerboseLevel;

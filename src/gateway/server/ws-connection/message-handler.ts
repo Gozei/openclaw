@@ -34,7 +34,14 @@ import { recordRemoteNodeInfo, refreshRemoteNodeBins } from "../../../infra/skil
 import { upsertPresence } from "../../../infra/system-presence.js";
 import { loadVoiceWakeConfig } from "../../../infra/voicewake.js";
 import { rawDataToString } from "../../../infra/ws.js";
+import {
+  finishPerfSpan,
+  logPerfEvent,
+  startPerfSpan,
+  type PerfOutcome,
+} from "../../../logging/perf.js";
 import type { createSubsystemLogger } from "../../../logging/subsystem.js";
+import { createTraceContext } from "../../../logging/trace-context.js";
 import {
   resolveBootstrapProfileScopesForRole,
   type DeviceBootstrapProfile,
@@ -390,6 +397,56 @@ export function attachGatewayWsMessageHandler(params: {
         }
 
         const frame = parsed;
+        const connectTrace = createTraceContext({
+          requestId: frame.id,
+          method: "connect",
+        });
+        const connectTotalSpan = startPerfSpan({
+          name: "gateway.request.connect.total",
+          trace: connectTrace,
+        });
+        const connectAuthSpan = startPerfSpan({
+          name: "gateway.request.auth",
+          trace: connectTrace,
+        });
+        let connectTotalLogged = false;
+        let connectAuthLogged = false;
+        const logConnectTotal = (params: {
+          outcome: PerfOutcome;
+          errorCode?: string;
+          details?: Record<string, unknown>;
+        }) => {
+          if (connectTotalLogged) {
+            return;
+          }
+          connectTotalLogged = true;
+          logPerfEvent(
+            finishPerfSpan(connectTotalSpan, {
+              outcome: params.outcome,
+              errorCode: params.errorCode,
+              details: params.details,
+              slowThresholdMs: 120,
+            }),
+          );
+        };
+        const logConnectAuth = (params: {
+          outcome: PerfOutcome;
+          errorCode?: string;
+          details?: Record<string, unknown>;
+        }) => {
+          if (connectAuthLogged) {
+            return;
+          }
+          connectAuthLogged = true;
+          logPerfEvent(
+            finishPerfSpan(connectAuthSpan, {
+              outcome: params.outcome,
+              errorCode: params.errorCode,
+              details: params.details,
+              slowThresholdMs: 80,
+            }),
+          );
+        };
         const connectParams = frame.params as ConnectParams;
         const resolvedAuth = getResolvedAuth();
         const clientLabel = connectParams.client.displayName ?? connectParams.client.id;
@@ -412,6 +469,14 @@ export function attachGatewayWsMessageHandler(params: {
           message: string,
           options?: Parameters<typeof errorShape>[2],
         ) => {
+          logConnectTotal({
+            outcome: "error",
+            errorCode: code,
+            details:
+              options?.details && typeof options.details === "object"
+                ? (options.details as Record<string, unknown>)
+                : undefined,
+          });
           send({
             type: "res",
             id: frame.id,
@@ -559,6 +624,18 @@ export function attachGatewayWsMessageHandler(params: {
             reason: failedAuth.reason,
             client: connectParams.client,
           });
+          logConnectAuth({
+            outcome: "error",
+            errorCode: failedAuth.reason ?? "unauthorized",
+            details: {
+              authMode: resolvedAuth.mode,
+              authMethod,
+              authProvided,
+              role,
+              scopeCount: scopes.length,
+              hasDeviceIdentity: Boolean(device),
+            },
+          });
           sendHandshakeErrorResponse(ErrorCodes.INVALID_REQUEST, authMessage, {
             details: {
               code: resolveAuthConnectErrorDetailCode(failedAuth.reason),
@@ -654,6 +731,14 @@ export function attachGatewayWsMessageHandler(params: {
               client: connectParams.client.id,
               deviceId: device.id,
             });
+            logConnectTotal({
+              outcome: "error",
+              errorCode: reason,
+              details: {
+                code: resolveDeviceAuthConnectErrorDetailCode(reason),
+                reason,
+              },
+            });
             send({
               type: "res",
               id: frame.id,
@@ -743,6 +828,16 @@ export function attachGatewayWsMessageHandler(params: {
           rejectUnauthorized(authResult);
           return;
         }
+        logConnectAuth({
+          outcome: "ok",
+          details: {
+            authMode: resolvedAuth.mode,
+            authMethod,
+            role,
+            scopeCount: scopes.length,
+            hasDeviceIdentity: Boolean(device),
+          },
+        });
         if (authMethod === "token" || authMethod === "password") {
           const sharedGatewaySessionGeneration =
             resolveSharedGatewaySessionGeneration(resolvedAuth);
@@ -752,6 +847,10 @@ export function attachGatewayWsMessageHandler(params: {
             requiredSharedGatewaySessionGeneration !== undefined &&
             sharedGatewaySessionGeneration !== requiredSharedGatewaySessionGeneration
           ) {
+            logConnectTotal({
+              outcome: "error",
+              errorCode: "gateway_auth_rotated",
+            });
             setCloseCause("gateway-auth-rotated", {
               authGenerationStale: true,
             });
@@ -987,6 +1086,15 @@ export function attachGatewayWsMessageHandler(params: {
                 deviceId: device.id,
                 ...(recoveryRequestId ? { requestId: recoveryRequestId } : {}),
                 reason,
+              });
+              logConnectTotal({
+                outcome: "error",
+                errorCode: ErrorCodes.NOT_PAIRED,
+                details: {
+                  code: ConnectErrorDetailCodes.PAIRING_REQUIRED,
+                  ...(recoveryRequestId ? { requestId: recoveryRequestId } : {}),
+                  reason,
+                },
               });
               send({
                 type: "res",
@@ -1313,7 +1421,20 @@ export function attachGatewayWsMessageHandler(params: {
 
         try {
           await sendFrame({ type: "res", id: frame.id, ok: true, payload: helloOk });
+          logConnectTotal({
+            outcome: "ok",
+            details: {
+              authMethod,
+              role,
+              scopeCount: scopes.length,
+              hasDeviceIdentity: Boolean(device),
+            },
+          });
         } catch (err) {
+          logConnectTotal({
+            outcome: "error",
+            errorCode: "hello_send_failed",
+          });
           setCloseCause("hello-send-failed", { error: formatForLog(err) });
           close();
           return;

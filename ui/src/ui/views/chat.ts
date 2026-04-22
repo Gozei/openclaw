@@ -8,6 +8,7 @@ import { BRAND_COMPANY, BRAND_NAME, BRAND_READY_LABEL, BRAND_RUNTIME_LABEL } fro
 import {
   CHAT_ATTACHMENT_ACCEPT,
   isSupportedChatAttachmentMimeType,
+  resolveSupportedChatAttachmentKind,
 } from "../chat/attachment-support.ts";
 import { DeletedMessages } from "../chat/deleted-messages.ts";
 import { exportChatMarkdown } from "../chat/export.ts";
@@ -674,20 +675,20 @@ function handlePaste(e: ClipboardEvent, props: ChatProps) {
   if (!items || !props.onAttachmentsChange) {
     return;
   }
-  const imageItems: DataTransferItem[] = [];
+  const fileItems: DataTransferItem[] = [];
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
-    if (item.type.startsWith("image/")) {
-      imageItems.push(item);
+    if (item.kind === "file") {
+      fileItems.push(item);
     }
   }
-  if (imageItems.length === 0) {
+  if (fileItems.length === 0) {
     return;
   }
   e.preventDefault();
-  for (const item of imageItems) {
+  for (const item of fileItems) {
     const file = item.getAsFile();
-    if (!file) {
+    if (!file || !isSupportedChatAttachmentMimeType(file.type, file.name)) {
       continue;
     }
     const reader = new FileReader();
@@ -697,6 +698,7 @@ function handlePaste(e: ClipboardEvent, props: ChatProps) {
         id: generateAttachmentId(),
         dataUrl,
         mimeType: file.type,
+        fileName: file.name,
       };
       const current = props.attachments ?? [];
       props.onAttachmentsChange?.([...current, newAttachment]);
@@ -714,7 +716,7 @@ function handleFileSelect(e: Event, props: ChatProps) {
   const additions: ChatAttachment[] = [];
   let pending = 0;
   for (const file of input.files) {
-    if (!isSupportedChatAttachmentMimeType(file.type)) {
+    if (!isSupportedChatAttachmentMimeType(file.type, file.name)) {
       continue;
     }
     pending++;
@@ -724,6 +726,7 @@ function handleFileSelect(e: Event, props: ChatProps) {
         id: generateAttachmentId(),
         dataUrl: reader.result as string,
         mimeType: file.type,
+        fileName: file.name,
       });
       pending--;
       if (pending === 0) {
@@ -745,7 +748,7 @@ function handleDrop(e: DragEvent, props: ChatProps) {
   const additions: ChatAttachment[] = [];
   let pending = 0;
   for (const file of files) {
-    if (!isSupportedChatAttachmentMimeType(file.type)) {
+    if (!isSupportedChatAttachmentMimeType(file.type, file.name)) {
       continue;
     }
     pending++;
@@ -755,6 +758,7 @@ function handleDrop(e: DragEvent, props: ChatProps) {
         id: generateAttachmentId(),
         dataUrl: reader.result as string,
         mimeType: file.type,
+        fileName: file.name,
       });
       pending--;
       if (pending === 0) {
@@ -772,10 +776,114 @@ function renderAttachmentPreview(props: ChatProps): TemplateResult | typeof noth
   }
   return html`
     <div class="chat-attachments-preview">
-      ${attachments.map(
-        (att) => html`
-          <div class="chat-attachment-thumb">
-            <img src=${att.dataUrl} alt="Attachment preview" />
+      ${attachments.map((att) => {
+        const kind = resolveSupportedChatAttachmentKind({
+          mimeType: att.mimeType,
+          fileName: att.fileName,
+        });
+        const label = att.fileName?.trim() || att.mimeType || "Attachment";
+        const rawMime = att.mimeType?.trim().toLowerCase() ?? "";
+        const rawLabel = label.toLowerCase();
+        const isZipArchive =
+          rawMime === "application/zip" ||
+          rawMime === "application/x-zip-compressed" ||
+          rawLabel.endsWith(".zip");
+        const documentMeta = (() => {
+          if (isZipArchive) {
+            return {
+              iconGlyph: "ZIP",
+              kindLabel: "zip archive",
+              detailLabel: "reads txt/csv/pdf/docx/xlsx/pptx",
+              actionHint: "staged for unpack/install",
+            };
+          }
+          if (rawMime === "application/pdf" || rawLabel.endsWith(".pdf")) {
+            return {
+              iconGlyph: "PDF",
+              kindLabel: "document",
+              detailLabel: "portable document format",
+              actionHint: "ready to send",
+            };
+          }
+          if (
+            rawMime === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+            rawLabel.endsWith(".xlsx") ||
+            rawLabel.endsWith(".csv")
+          ) {
+            return {
+              iconGlyph: "XLS",
+              kindLabel: "spreadsheet",
+              detailLabel: "table or sheet attachment",
+              actionHint: "ready to send",
+            };
+          }
+          if (
+            rawMime ===
+              "application/vnd.openxmlformats-officedocument.presentationml.presentation" ||
+            rawLabel.endsWith(".pptx")
+          ) {
+            return {
+              iconGlyph: "PPT",
+              kindLabel: "slides",
+              detailLabel: "presentation attachment",
+              actionHint: "ready to send",
+            };
+          }
+          if (
+            rawMime === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+            rawLabel.endsWith(".docx")
+          ) {
+            return {
+              iconGlyph: "DOC",
+              kindLabel: "document",
+              detailLabel: "word processing attachment",
+              actionHint: "ready to send",
+            };
+          }
+          if (kind === "audio") {
+            return {
+              iconGlyph: "♪",
+              kindLabel: "audio",
+              detailLabel: "audio file",
+              actionHint: "ready to send",
+            };
+          }
+          if (kind === "video") {
+            return {
+              iconGlyph: "▶",
+              kindLabel: "video",
+              detailLabel: "video file",
+              actionHint: "ready to send",
+            };
+          }
+          return {
+            iconGlyph: kind === "document" ? "FILE" : "FILE",
+            kindLabel: kind ?? "attachment",
+            detailLabel: kind === "document" ? "document file" : "attachment",
+            actionHint: "ready to send",
+          };
+        })();
+        return html`
+          <div
+            class="chat-attachment-thumb ${kind === "image"
+              ? "chat-attachment-thumb--image"
+              : "chat-attachment-thumb--file"}"
+          >
+            ${kind === "image"
+              ? html`<img src=${att.dataUrl} alt="Attachment preview" />`
+              : html`
+                  <div class="chat-attachment-file" aria-label=${label}>
+                    <span class="chat-attachment-file__icon" aria-hidden="true"
+                      >${documentMeta.iconGlyph}</span
+                    >
+                    <span class="chat-attachment-file__body">
+                      <span class="chat-attachment-file__name" title=${label}>${label}</span>
+                      <span class="chat-attachment-file__meta">${documentMeta.kindLabel}</span>
+                      <span class="chat-attachment-file__hint">${documentMeta.detailLabel}</span>
+                      <span class="chat-attachment-file__status">${documentMeta.actionHint}</span>
+                    </span>
+                  </div>
+                `}
             <button
               class="chat-attachment-remove"
               type="button"
@@ -788,8 +896,8 @@ function renderAttachmentPreview(props: ChatProps): TemplateResult | typeof noth
               &times;
             </button>
           </div>
-        `,
-      )}
+        `;
+      })}
     </div>
   `;
 }
@@ -1790,7 +1898,7 @@ export function renderChat(props: ChatProps) {
                     <div class="chat-queue__item">
                       <div class="chat-queue__text">
                         ${item.text ||
-                        (item.attachments?.length ? `Image (${item.attachments.length})` : "")}
+                        (item.attachments?.length ? `Attachment (${item.attachments.length})` : "")}
                       </div>
                       <button
                         class="btn chat-queue__remove"

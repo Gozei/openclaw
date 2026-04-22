@@ -20,8 +20,10 @@ import { resolveRuntimeServiceVersion } from "../version.js";
 import { DEFAULT_ASSISTANT_IDENTITY, resolveAssistantIdentity } from "./assistant-identity.js";
 import type { AuthRateLimiter } from "./auth-rate-limit.js";
 import { authorizeHttpGatewayConnect, type ResolvedGatewayAuth } from "./auth.js";
+import { resolveGatewayAttachmentMaxBytes } from "./chat-attachments.js";
 import {
   CONTROL_UI_BOOTSTRAP_CONFIG_PATH,
+  DEFAULT_GATEWAY_ATTACHMENT_MAX_BYTES,
   type ControlUiBootstrapConfig,
 } from "./control-ui-contract.js";
 import { buildControlUiCspHeader, computeInlineScriptHashes } from "./control-ui-csp.js";
@@ -598,6 +600,9 @@ export function handleControlUiHttpRequest(
             ? "strict"
             : "scripts",
       allowExternalEmbedUrls: config?.gateway?.controlUi?.allowExternalEmbedUrls === true,
+      chatAttachmentMaxBytes: config
+        ? resolveGatewayAttachmentMaxBytes(config)
+        : DEFAULT_GATEWAY_ATTACHMENT_MAX_BYTES,
     } satisfies ControlUiBootstrapConfig);
     return true;
   }

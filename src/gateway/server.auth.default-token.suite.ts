@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { WebSocket } from "ws";
+import { resetLogger, setLoggerOverride } from "../logging.js";
+import { registerLogTransport } from "../logging/logger.js";
 import {
   connectReq,
   ConnectErrorDetailCodes,
@@ -44,6 +46,8 @@ export function registerDefaultAuthTokenSuite(): void {
     afterEach(async () => {
       await server?.close();
       server = undefined;
+      setLoggerOverride(null);
+      resetLogger();
     });
 
     async function expectNonceValidationError(params: {
@@ -102,6 +106,47 @@ export function registerDefaultAuthTokenSuite(): void {
           process.env.OPENCLAW_TEST_HANDSHAKE_TIMEOUT_MS = prevHandshakeTimeout;
         }
       }
+    });
+
+    test("logs connect auth and total perf events for successful handshakes", async () => {
+      setLoggerOverride({ level: "debug", consoleLevel: "silent" });
+      const records: Array<Record<string, unknown>> = [];
+      const unregister = registerLogTransport((record) => {
+        records.push(record);
+      });
+
+      try {
+        const ws = await openWs(port);
+        try {
+          const res = await connectReq(ws);
+          expect(res.ok).toBe(true);
+        } finally {
+          ws.close();
+        }
+      } finally {
+        unregister();
+      }
+
+      const authRecord = records.find(
+        (record) => (record[1] as { name?: string } | undefined)?.name === "gateway.request.auth",
+      );
+      const totalRecord = records.find(
+        (record) =>
+          (record[1] as { name?: string } | undefined)?.name === "gateway.request.connect.total",
+      );
+
+      expect(authRecord?.[1]).toMatchObject({
+        kind: "perf",
+        name: "gateway.request.auth",
+        method: "connect",
+        outcome: "ok",
+      });
+      expect(totalRecord?.[1]).toMatchObject({
+        kind: "perf",
+        name: "gateway.request.connect.total",
+        method: "connect",
+        outcome: "ok",
+      });
     });
 
     test("prefers OPENCLAW_HANDSHAKE_TIMEOUT_MS and falls back on empty string", () => {

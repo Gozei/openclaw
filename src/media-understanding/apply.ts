@@ -9,6 +9,7 @@ import {
   normalizeMimeType,
   resolveInputFileLimits,
 } from "../media/input-files.js";
+import { isOfficeDocumentMime } from "../media/office-extract.js";
 import { wrapExternalContent } from "../security/external-content.js";
 import {
   normalizeLowercaseStringOrEmpty,
@@ -317,8 +318,6 @@ function isBinaryMediaMime(mime?: string): boolean {
     return true;
   }
   if (
-    mime === "application/zip" ||
-    mime === "application/x-zip-compressed" ||
     mime === "application/gzip" ||
     mime === "application/x-gzip" ||
     mime === "application/x-rar-compressed" ||
@@ -328,6 +327,9 @@ function isBinaryMediaMime(mime?: string): boolean {
   }
   if (mime.endsWith("+zip")) {
     return true;
+  }
+  if (isOfficeDocumentMime(mime)) {
+    return false;
   }
   if (mime.startsWith("application/vnd.")) {
     // Keep vendor +json/+xml payloads eligible for text extraction while
@@ -389,20 +391,38 @@ async function extractFileBlocks(params: {
     if (!forcedTextMimeResolved && isBinaryMediaMime(normalizedRawMime)) {
       continue;
     }
-    if (hasSuspiciousBinarySignal(bufferResult?.buffer)) {
+    const zipMimeResolved =
+      normalizedRawMime === "application/zip" ||
+      normalizedRawMime === "application/x-zip-compressed"
+        ? normalizedRawMime
+        : undefined;
+    if (
+      !isOfficeDocumentMime(normalizedRawMime) &&
+      !zipMimeResolved &&
+      hasSuspiciousBinarySignal(bufferResult?.buffer)
+    ) {
       continue;
     }
     const utf16Charset = resolveUtf16Charset(bufferResult?.buffer);
-    const textSample = decodeTextSample(bufferResult?.buffer);
-    // Do not coerce real PDFs into text/plain via printable-byte heuristics.
-    // PDFs have a dedicated extraction path in extractFileContentFromSource.
-    const allowTextHeuristic = normalizedRawMime !== "application/pdf";
+    const officeMimeResolved = isOfficeDocumentMime(normalizedRawMime)
+      ? normalizedRawMime
+      : undefined;
+    const textSample =
+      officeMimeResolved || zipMimeResolved ? "" : decodeTextSample(bufferResult?.buffer);
+    // Do not coerce real PDFs, Office containers, or supported zip containers into text/plain via printable-byte heuristics.
+    // They have dedicated extraction paths in extractFileContentFromSource.
+    const allowTextHeuristic =
+      !officeMimeResolved && !zipMimeResolved && normalizedRawMime !== "application/pdf";
     const textLike =
       allowTextHeuristic && (Boolean(utf16Charset) || looksLikeUtf8Text(bufferResult?.buffer));
     const guessedDelimited = textLike ? guessDelimitedMime(textSample) : undefined;
     const textHint =
-      forcedTextMimeResolved ?? guessedDelimited ?? (textLike ? "text/plain" : undefined);
-    const mimeType = sanitizeMimeType(textHint ?? normalizeMimeType(rawMime));
+      officeMimeResolved || zipMimeResolved
+        ? undefined
+        : (forcedTextMimeResolved ?? guessedDelimited ?? (textLike ? "text/plain" : undefined));
+    const mimeType = sanitizeMimeType(
+      officeMimeResolved ?? zipMimeResolved ?? textHint ?? normalizeMimeType(rawMime),
+    );
     // Log when MIME type is overridden from non-text to text for auditability
     if (textHint && rawMime && !rawMime.startsWith("text/")) {
       logVerbose(
@@ -436,6 +456,19 @@ async function extractFileBlocks(params: {
     try {
       const mediaType = utf16Charset ? `${mimeType}; charset=${utf16Charset}` : mimeType;
       const { allowedMimesConfigured: _allowedMimesConfigured, ...baseLimits } = limits;
+      if (shouldLogVerbose()) {
+        const extractMode =
+          mimeType === "application/pdf"
+            ? "pdf"
+            : isOfficeDocumentMime(mimeType)
+              ? "office"
+              : mimeType === "application/zip" || mimeType === "application/x-zip-compressed"
+                ? "zip"
+                : "text";
+        logVerbose(
+          `media: extracting file attachment index=${attachment.index} filename=${bufferResult.fileName ?? "unknown"} mime=${mimeType} mode=${extractMode}`,
+        );
+      }
       extracted = await extractFileContentFromSource({
         source: {
           type: "base64",
@@ -448,6 +481,11 @@ async function extractFileBlocks(params: {
           allowedMimes,
         },
       });
+      if (shouldLogVerbose()) {
+        logVerbose(
+          `media: extracted file attachment index=${attachment.index} filename=${extracted.filename} chars=${extracted.text?.length ?? 0} images=${extracted.images?.length ?? 0}`,
+        );
+      }
     } catch (err) {
       if (shouldLogVerbose()) {
         logVerbose(`media: file attachment skipped (extract): ${String(err)}`);

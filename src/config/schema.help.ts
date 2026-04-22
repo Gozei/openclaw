@@ -125,6 +125,10 @@ export const FIELD_HELP: Record<string, string> = {
     "Filesystem path to the TLS private key file used by the gateway when TLS is enabled. Keep this key file permission-restricted and rotate per your security policy.",
   "gateway.tls.caPath":
     "Optional CA bundle path for client verification or custom trust-chain requirements at the gateway edge. Use this when private PKI or custom certificate chains are part of deployment.",
+  "gateway.attachments":
+    "Shared inbound attachment limits for Control UI and Gateway chat/agent upload surfaces. Raise this when large PDFs or Office files are expected, but keep it bounded to protect memory and request size.",
+  "gateway.attachments.maxBytes":
+    "Maximum decoded bytes allowed per uploaded chat attachment before the Gateway rejects it. Default is 10MB; raise carefully because uploads arrive as base64 and increase request overhead.",
   "gateway.http":
     "Gateway HTTP API configuration grouping endpoint toggles and transport-facing API exposure controls. Keep only required endpoints enabled to reduce attack surface.",
   "gateway.http.endpoints":

@@ -44,6 +44,7 @@ function createTimeoutRace<T>(timeoutMs: number, onTimeout: () => T) {
 
 export async function runGatewayClosePrelude(params: {
   stopDiagnostics?: () => void;
+  stopRuntimeSampler?: () => void;
   clearSkillsRefreshTimer?: () => void;
   skillsChangeUnsub?: () => void;
   disposeAuthRateLimiter?: () => void;
@@ -54,6 +55,7 @@ export async function runGatewayClosePrelude(params: {
   closeMcpServer?: () => Promise<void>;
 }): Promise<void> {
   params.stopDiagnostics?.();
+  params.stopRuntimeSampler?.();
   params.clearSkillsRefreshTimer?.();
   params.skillsChangeUnsub?.();
   params.disposeAuthRateLimiter?.();

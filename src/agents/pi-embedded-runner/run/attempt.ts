@@ -15,6 +15,13 @@ import {
   ensureGlobalUndiciEnvProxyDispatcher,
   ensureGlobalUndiciStreamTimeouts,
 } from "../../../infra/net/undici-global-dispatcher.js";
+import {
+  finishPerfSpan,
+  logPerfEvent,
+  startPerfSpan,
+  type PerfOutcome,
+} from "../../../logging/perf.js";
+import { createTraceContext } from "../../../logging/trace-context.js";
 import { MAX_IMAGE_BYTES } from "../../../media/constants.js";
 import {
   isOllamaCompatProvider,
@@ -409,6 +416,12 @@ export async function runEmbeddedAttempt(
     config: params.config,
     agentId: params.agentId,
   });
+  const attemptTrace = createTraceContext({
+    runId: params.runId,
+    sessionId: params.sessionId,
+    agentId: sessionAgentId,
+    method: "agent",
+  });
 
   let restoreSkillEnv: (() => void) | undefined;
   try {
@@ -444,6 +457,15 @@ export async function runEmbeddedAttempt(
           compactionTimeoutMs: resolveCompactionTimeoutMs(params.config),
         }),
       }),
+      perf: {
+        trace: {
+          runId: params.runId,
+          sessionId: params.sessionId,
+          agentId: sessionAgentId,
+          method: "agent",
+        },
+        slowThresholdMs: 100,
+      },
     });
 
     const sessionLabel = params.sessionKey ?? params.sessionId;
@@ -1441,6 +1463,10 @@ export async function runEmbeddedAttempt(
         }
 
         if (params.contextEngine) {
+          const contextAssembleSpan = startPerfSpan({
+            name: "agent.run.context_assemble",
+            trace: attemptTrace,
+          });
           try {
             const assembled = await assembleAttemptContextEngine({
               contextEngine: params.contextEngine,
@@ -1469,7 +1495,25 @@ export async function runEmbeddedAttempt(
                 `context engine: prepended system prompt addition (${assembled.systemPromptAddition.length} chars)`,
               );
             }
+            logPerfEvent(
+              finishPerfSpan(contextAssembleSpan, {
+                slowThresholdMs: 150,
+                details: {
+                  messages: activeSession.messages.length,
+                },
+              }),
+            );
           } catch (assembleErr) {
+            logPerfEvent(
+              finishPerfSpan(contextAssembleSpan, {
+                outcome: "error",
+                errorCode:
+                  assembleErr instanceof Error && assembleErr.name.trim().length > 0
+                    ? assembleErr.name
+                    : "context_assemble_failed",
+                slowThresholdMs: 150,
+              }),
+            );
             log.warn(
               `context engine assemble failed, using pipeline messages: ${String(assembleErr)}`,
             );
@@ -1570,6 +1614,7 @@ export async function runEmbeddedAttempt(
         buildEmbeddedSubscriptionParams({
           session: activeSession,
           runId: params.runId,
+          firstTokenStartedAtMs: Date.now(),
           initialReplayState: params.initialReplayState,
           hookRunner: getGlobalHookRunner() ?? undefined,
           verboseLevel: params.verboseLevel,
@@ -2288,6 +2333,12 @@ export async function runEmbeddedAttempt(
 
         // Let the active context engine run its post-turn lifecycle.
         if (params.contextEngine) {
+          const persistSpan = startPerfSpan({
+            name: "agent.run.persist",
+            trace: attemptTrace,
+          });
+          let persistOutcome: PerfOutcome = "ok";
+          let persistErrorCode: string | undefined;
           const runtimeCurrentTokenCount = derivePromptTokens(lastCallUsage);
           const afterTurnRuntimeContext = buildAfterTurnRuntimeContext({
             attempt: params,
@@ -2297,31 +2348,51 @@ export async function runEmbeddedAttempt(
             currentTokenCount: runtimeCurrentTokenCount,
             promptCache,
           });
-          await finalizeAttemptContextEngineTurn({
-            contextEngine: params.contextEngine,
-            promptError: Boolean(promptError),
-            aborted,
-            yieldAborted,
-            sessionIdUsed,
-            sessionKey: params.sessionKey,
-            sessionFile: params.sessionFile,
-            messagesSnapshot,
-            prePromptMessageCount,
-            tokenBudget: params.contextTokenBudget,
-            runtimeContext: afterTurnRuntimeContext,
-            runMaintenance: async (contextParams) =>
-              await runContextEngineMaintenance({
-                contextEngine: contextParams.contextEngine as never,
-                sessionId: contextParams.sessionId,
-                sessionKey: contextParams.sessionKey,
-                sessionFile: contextParams.sessionFile,
-                reason: contextParams.reason,
-                sessionManager: contextParams.sessionManager as never,
-                runtimeContext: contextParams.runtimeContext,
+          try {
+            await finalizeAttemptContextEngineTurn({
+              contextEngine: params.contextEngine,
+              promptError: Boolean(promptError),
+              aborted,
+              yieldAborted,
+              sessionIdUsed,
+              sessionKey: params.sessionKey,
+              sessionFile: params.sessionFile,
+              messagesSnapshot,
+              prePromptMessageCount,
+              tokenBudget: params.contextTokenBudget,
+              runtimeContext: afterTurnRuntimeContext,
+              runMaintenance: async (contextParams) =>
+                await runContextEngineMaintenance({
+                  contextEngine: contextParams.contextEngine as never,
+                  sessionId: contextParams.sessionId,
+                  sessionKey: contextParams.sessionKey,
+                  sessionFile: contextParams.sessionFile,
+                  reason: contextParams.reason,
+                  sessionManager: contextParams.sessionManager as never,
+                  runtimeContext: contextParams.runtimeContext,
+                }),
+              sessionManager,
+              warn: (message) => log.warn(message),
+            });
+          } catch (persistErr) {
+            persistOutcome = "error";
+            persistErrorCode =
+              persistErr instanceof Error && persistErr.name.trim().length > 0
+                ? persistErr.name
+                : "persist_failed";
+            throw persistErr;
+          } finally {
+            logPerfEvent(
+              finishPerfSpan(persistSpan, {
+                outcome: persistOutcome,
+                errorCode: persistErrorCode,
+                slowThresholdMs: 120,
+                details: {
+                  messagesSnapshot: messagesSnapshot.length,
+                },
               }),
-            sessionManager,
-            warn: (message) => log.warn(message),
-          });
+            );
+          }
         }
 
         if (

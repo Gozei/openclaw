@@ -291,4 +291,17 @@ describe("buildInboundMediaNote", () => {
     });
     expect(note).toBe("[media attached: /tmp/voice.ogg (audio/ogg)]");
   });
+
+  it("adds archive-ready guidance for zip attachments", () => {
+    const note = buildInboundMediaNote({
+      MediaPath: "media/inbound/bundle.zip",
+      MediaType: "application/zip",
+    });
+    expect(note).toBe(
+      [
+        "[media attached: media/inbound/bundle.zip (application/zip)]",
+        "[archive ready: media/inbound/bundle.zip (application/zip) | local path available for unpack/install]",
+      ].join("\n"),
+    );
+  });
 });

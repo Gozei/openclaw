@@ -733,6 +733,12 @@ export const OpenClawSchema = z
           })
           .strict()
           .optional(),
+        attachments: z
+          .object({
+            maxBytes: z.number().int().positive().optional(),
+          })
+          .strict()
+          .optional(),
         webchat: z
           .object({
             chatHistoryMaxChars: z.number().int().positive().max(500_000).optional(),

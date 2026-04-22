@@ -6,6 +6,13 @@ import { resolveContextEngine } from "../../context-engine/registry.js";
 import { emitAgentPlanEvent } from "../../infra/agent-events.js";
 import { sleepWithAbort } from "../../infra/backoff.js";
 import { formatErrorMessage } from "../../infra/errors.js";
+import {
+  finishPerfSpan,
+  logPerfEvent,
+  startPerfSpan,
+  type PerfOutcome,
+} from "../../logging/perf.js";
+import { createTraceContext } from "../../logging/trace-context.js";
 import { getGlobalHookRunner } from "../../plugins/hook-runner-global.js";
 import { enqueueCommandInLane } from "../../process/command-queue.js";
 import { normalizeOptionalString } from "../../shared/string-coerce.js";
@@ -224,6 +231,30 @@ export async function runEmbeddedPiAgent(
         : "plain"
       : "markdown");
   const isProbeSession = params.sessionId?.startsWith("probe-") ?? false;
+  const runTrace = createTraceContext({
+    runId: params.runId,
+    sessionId: params.sessionId,
+    agentId: params.agentId,
+    method: "agent",
+  });
+  const totalSpan = startPerfSpan({
+    name: "agent.run.total",
+    trace: runTrace,
+    details: {
+      lane: params.lane ?? "default",
+      sessionKeyPresent: Boolean(params.sessionKey?.trim()),
+    },
+  });
+  const queueWaitSpan = startPerfSpan({
+    name: "agent.run.queue_wait",
+    trace: runTrace,
+    details: {
+      lane: params.lane ?? "default",
+    },
+  });
+  let queueWaitLogged = false;
+  let totalOutcome: PerfOutcome = "ok";
+  let totalErrorCode: string | undefined;
 
   const throwIfAborted = () => {
     if (!params.abortSignal?.aborted) {
@@ -243,10 +274,25 @@ export async function runEmbeddedPiAgent(
 
   throwIfAborted();
 
-  return enqueueSession(() => {
+  const logQueueWait = (outcome: PerfOutcome, errorCode?: string) => {
+    if (queueWaitLogged) {
+      return;
+    }
+    queueWaitLogged = true;
+    logPerfEvent(
+      finishPerfSpan(queueWaitSpan, {
+        outcome,
+        errorCode,
+        slowThresholdMs: 200,
+      }),
+    );
+  };
+
+  const runPromise: Promise<EmbeddedPiRunResult> = enqueueSession(() => {
     throwIfAborted();
     return enqueueGlobal(async () => {
       throwIfAborted();
+      logQueueWait("ok");
       const started = Date.now();
       const workspaceResolution = resolveRunWorkspaceDir({
         workspaceDir: params.workspaceDir,
@@ -2071,4 +2117,26 @@ export async function runEmbeddedPiAgent(
       }
     });
   });
+
+  return runPromise
+    .catch((error) => {
+      const isCancelled = params.abortSignal?.aborted === true;
+      totalOutcome = isCancelled ? "cancelled" : "error";
+      totalErrorCode =
+        error instanceof Error && error.name.trim().length > 0 ? error.name : "agent_run_failed";
+      logQueueWait(totalOutcome, totalErrorCode);
+      throw error;
+    })
+    .finally(() => {
+      logPerfEvent(
+        finishPerfSpan(totalSpan, {
+          outcome: totalOutcome,
+          errorCode: totalErrorCode,
+          slowThresholdMs: 2000,
+          details: {
+            aborted: params.abortSignal?.aborted === true,
+          },
+        }),
+      );
+    });
 }

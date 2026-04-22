@@ -3,6 +3,7 @@ import {
   buildMessageWithAttachments,
   type ChatAttachment,
   parseMessageWithAttachments,
+  resolveGatewayAttachmentMaxBytes,
 } from "./chat-attachments.js";
 
 const PNG_1x1 =
@@ -43,6 +44,15 @@ describe("buildMessageWithAttachments", () => {
 });
 
 describe("parseMessageWithAttachments", () => {
+  it("uses a 10MB default attachment limit and honors gateway config overrides", () => {
+    expect(resolveGatewayAttachmentMaxBytes({})).toBe(10_000_000);
+    expect(
+      resolveGatewayAttachmentMaxBytes({
+        gateway: { attachments: { maxBytes: 15_000_000 } },
+      }),
+    ).toBe(15_000_000);
+  });
+
   it("strips data URL prefix", async () => {
     const parsed = await parseMessageWithAttachments(
       "see this",
@@ -87,8 +97,10 @@ describe("parseMessageWithAttachments", () => {
       },
     ]);
     expect(parsed.images).toHaveLength(0);
+    expect(parsed.savedAttachments).toHaveLength(1);
+    expect(parsed.savedAttachments[0]?.mimeType).toBe("application/pdf");
     expect(logs).toHaveLength(1);
-    expect(logs[0]).toMatch(/non-image/i);
+    expect(logs[0]).toMatch(/mime mismatch/i);
   });
 
   it("prefers sniffed mime type and logs mismatch", async () => {
@@ -113,7 +125,7 @@ describe("parseMessageWithAttachments", () => {
     ]);
     expect(parsed.images).toHaveLength(0);
     expect(logs).toHaveLength(1);
-    expect(logs[0]).toMatch(/unable to detect image mime type/i);
+    expect(logs[0]).toMatch(/unsupported attachment type/i);
   });
 
   it("keeps valid images and drops invalid ones", async () => {
@@ -133,9 +145,81 @@ describe("parseMessageWithAttachments", () => {
       },
     ]);
     expect(parsed.images).toHaveLength(1);
+    expect(parsed.savedAttachments).toHaveLength(1);
+    expect(parsed.savedAttachments[0]?.mimeType).toBe("application/pdf");
     expect(parsed.images[0]?.mimeType).toBe("image/png");
     expect(parsed.images[0]?.data).toBe(PNG_1x1);
-    expect(logs.some((l) => /non-image/i.test(l))).toBe(true);
+    expect(logs.some((l) => /mime mismatch/i.test(l))).toBe(true);
+  });
+
+  it("accepts text documents as saved attachments", async () => {
+    const markdown = Buffer.from("# Notes\n\nhello").toString("base64");
+    const { parsed, logs } = await parseWithWarnings("check this", [
+      {
+        type: "document",
+        mimeType: "text/markdown",
+        fileName: "notes.md",
+        content: markdown,
+      },
+    ]);
+    expect(parsed.message).toBe("check this");
+    expect(parsed.images).toHaveLength(0);
+    expect(parsed.savedAttachments).toHaveLength(1);
+    expect(parsed.savedAttachments[0]?.mimeType).toBe("text/markdown");
+    expect(parsed.attachmentOrder).toEqual(["saved"]);
+    expect(logs).toHaveLength(0);
+  });
+
+  it("accepts zip uploads as saved attachments", async () => {
+    const zip = Buffer.from("PK\x03\x04hello").toString("base64");
+    const { parsed, logs } = await parseWithWarnings("x", [
+      {
+        type: "document",
+        mimeType: "application/zip",
+        fileName: "bundle.zip",
+        content: zip,
+      },
+    ]);
+    expect(parsed.images).toHaveLength(0);
+    expect(parsed.savedAttachments).toHaveLength(1);
+    expect(parsed.savedAttachments[0]?.mimeType).toBe("application/zip");
+    expect(logs).toHaveLength(0);
+  });
+
+  it("keeps specific Office MIME types when sniffing only sees the zip container", async () => {
+    const docxContainer = Buffer.from("PK\x03\x04hello").toString("base64");
+    const { parsed, logs } = await parseWithWarnings("x", [
+      {
+        type: "document",
+        mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        fileName: "brief.docx",
+        content: docxContainer,
+      },
+    ]);
+
+    expect(parsed.images).toHaveLength(0);
+    expect(parsed.savedAttachments).toHaveLength(1);
+    expect(parsed.savedAttachments[0]?.mimeType).toBe(
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    );
+    expect(parsed.savedAttachments[0]?.label).toBe("brief.docx");
+    expect(logs).toHaveLength(0);
+  });
+
+  it("still drops unsupported archive uploads with a warning", async () => {
+    const archive = Buffer.from("PK\x03\x04hello").toString("base64");
+    const { parsed, logs } = await parseWithWarnings("x", [
+      {
+        type: "document",
+        mimeType: "application/x-7z-compressed",
+        fileName: "bundle.7z",
+        content: archive,
+      },
+    ]);
+    expect(parsed.images).toHaveLength(0);
+    expect(parsed.savedAttachments).toHaveLength(0);
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toMatch(/unsupported attachment type/i);
   });
 });
 

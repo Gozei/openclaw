@@ -1,3 +1,5 @@
+import path from "node:path";
+import JSZip from "jszip";
 import { fetchWithSsrFGuard } from "../infra/net/fetch-guard.js";
 import type { SsrFPolicy } from "../infra/net/ssrf.js";
 import { logWarn } from "../logger.js";
@@ -8,6 +10,7 @@ import {
 import { canonicalizeBase64, estimateBase64DecodedBytes } from "./base64.js";
 import { convertHeicToJpeg } from "./image-ops.js";
 import { detectMime } from "./mime.js";
+import { extractOfficeContent, isOfficeDocumentMime } from "./office-extract.js";
 import { extractPdfContent, type PdfExtractedImage } from "./pdf-extract.js";
 import { readResponseWithLimit } from "./read-response-with-limit.js";
 
@@ -106,6 +109,10 @@ export const DEFAULT_INPUT_FILE_MIMES = [
   "text/csv",
   "application/json",
   "application/pdf",
+  "application/zip",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 ];
 export const DEFAULT_INPUT_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
 export const DEFAULT_INPUT_FILE_MAX_BYTES = 5 * 1024 * 1024;
@@ -117,6 +124,162 @@ export const DEFAULT_INPUT_PDF_MAX_PIXELS = 4_000_000;
 export const DEFAULT_INPUT_PDF_MIN_TEXT_CHARS = 200;
 const NORMALIZED_INPUT_IMAGE_MIME = "image/jpeg";
 const HEIC_INPUT_IMAGE_MIMES = new Set(["image/heic", "image/heif"]);
+const ZIP_FILE_MIMES = new Set(["application/zip", "application/x-zip-compressed"]);
+const ZIP_TEXT_ENTRY_MIMES = new Map<string, string>([
+  [".csv", "text/csv"],
+  [".html", "text/html"],
+  [".json", "application/json"],
+  [".md", "text/markdown"],
+  [".txt", "text/plain"],
+]);
+const ZIP_OFFICE_ENTRY_MIMES = new Map<string, string>([
+  [".docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
+  [".pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"],
+  [".xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"],
+]);
+const MAX_ZIP_ENTRY_COUNT = 8;
+const MAX_ZIP_ENTRY_BYTES = 2 * 1024 * 1024;
+const MAX_ZIP_SUMMARY_EXAMPLES = 3;
+
+function isZipMime(mimeType: string | undefined): boolean {
+  return typeof mimeType === "string" && ZIP_FILE_MIMES.has(mimeType);
+}
+
+function resolveZipEntryMime(entryName: string): string | undefined {
+  const extension = path.extname(entryName).toLowerCase();
+  if (extension === ".pdf") {
+    return "application/pdf";
+  }
+  return ZIP_TEXT_ENTRY_MIMES.get(extension) ?? ZIP_OFFICE_ENTRY_MIMES.get(extension);
+}
+
+function normalizeZipEntryName(entryName: string): string | undefined {
+  const trimmed = entryName.trim().replaceAll("\\", "/");
+  if (!trimmed || trimmed.startsWith("/") || trimmed.includes("\0")) {
+    return undefined;
+  }
+  const normalized = path.posix.normalize(trimmed);
+  if (
+    normalized === "." ||
+    normalized.startsWith("../") ||
+    normalized.includes("/../") ||
+    path.posix.basename(normalized).startsWith(".")
+  ) {
+    return undefined;
+  }
+  return normalized;
+}
+
+async function extractZipContent(params: {
+  buffer: Buffer;
+  filename: string;
+  maxChars: number;
+  pdf: InputPdfLimits;
+}): Promise<string> {
+  const zip = await JSZip.loadAsync(params.buffer);
+  const entries = Object.keys(zip.files)
+    .map((name) => {
+      const file = zip.files[name];
+      const normalizedName = normalizeZipEntryName(name);
+      return file && !file.dir && normalizedName
+        ? {
+            file,
+            normalizedName,
+            mimeType: resolveZipEntryMime(normalizedName),
+          }
+        : undefined;
+    })
+    .filter((entry) => Boolean(entry))
+    .toSorted((a, b) =>
+      a!.normalizedName.localeCompare(b!.normalizedName, undefined, { numeric: true }),
+    ) as Array<{
+    file: JSZip.JSZipObject;
+    normalizedName: string;
+    mimeType?: string;
+  }>;
+
+  const supportedEntries = entries.filter((entry) => Boolean(entry.mimeType));
+  const candidateEntries = supportedEntries.slice(0, MAX_ZIP_ENTRY_COUNT);
+  const skippedUnsupportedEntries = entries
+    .filter((entry) => !entry.mimeType)
+    .map((entry) => entry.normalizedName);
+  const skippedOverLimit = Math.max(0, supportedEntries.length - candidateEntries.length);
+  const sections: string[] = [];
+  const includedFiles: string[] = [];
+  const skippedEmptyOrTooLargeEntries: string[] = [];
+  for (const entry of candidateEntries) {
+    const mimeType = entry.mimeType;
+    if (!mimeType) {
+      continue;
+    }
+    const buffer = await entry.file.async("nodebuffer");
+    if (buffer.byteLength === 0 || buffer.byteLength > MAX_ZIP_ENTRY_BYTES) {
+      skippedEmptyOrTooLargeEntries.push(entry.normalizedName);
+      continue;
+    }
+    let text = "";
+    if (mimeType === "application/pdf") {
+      const extracted = await extractPdfContent({
+        buffer,
+        maxPages: params.pdf.maxPages,
+        maxPixels: params.pdf.maxPixels,
+        minTextChars: params.pdf.minTextChars,
+        onImageExtractionError: (err) => {
+          logWarn(`media: ZIP PDF image extraction skipped, ${String(err)}`);
+        },
+      });
+      text = extracted.text ?? "";
+    } else if (isOfficeDocumentMime(mimeType)) {
+      text = await extractOfficeContent({
+        buffer,
+        mimeType,
+        maxChars: params.maxChars,
+      });
+    } else {
+      text = decodeTextContent(buffer, undefined);
+    }
+    const trimmed = clampText(text.trim(), params.maxChars);
+    if (!trimmed) {
+      skippedEmptyOrTooLargeEntries.push(entry.normalizedName);
+      continue;
+    }
+    includedFiles.push(entry.normalizedName);
+    sections.push(`File: ${entry.normalizedName}\n${trimmed}`);
+    if (sections.join("\n\n").length >= params.maxChars) {
+      break;
+    }
+  }
+  const skippedOverLimitEntries = supportedEntries
+    .slice(MAX_ZIP_ENTRY_COUNT)
+    .map((entry) => entry.normalizedName);
+  const summarizeZipExamples = (entriesToSummarize: string[]): string | undefined => {
+    if (entriesToSummarize.length === 0) {
+      return undefined;
+    }
+    const examples = entriesToSummarize.slice(0, MAX_ZIP_SUMMARY_EXAMPLES).join(", ");
+    const remaining =
+      entriesToSummarize.length - Math.min(entriesToSummarize.length, MAX_ZIP_SUMMARY_EXAMPLES);
+    return remaining > 0 ? `${examples} (+${remaining} more)` : examples;
+  };
+  const summaryLines = [
+    `Archive: ${params.filename}`,
+    `Readable files included: ${includedFiles.length}/${supportedEntries.length}`,
+    includedFiles.length > 0 ? `Included: ${includedFiles.join(", ")}` : undefined,
+    skippedUnsupportedEntries.length > 0
+      ? `Skipped unsupported files: ${skippedUnsupportedEntries.length} (${summarizeZipExamples(skippedUnsupportedEntries)})`
+      : undefined,
+    skippedOverLimit > 0
+      ? `Skipped after file-count limit: ${skippedOverLimit} (${summarizeZipExamples(skippedOverLimitEntries)})`
+      : undefined,
+    skippedEmptyOrTooLargeEntries.length > 0
+      ? `Skipped empty or oversized files: ${skippedEmptyOrTooLargeEntries.length} (${summarizeZipExamples(skippedEmptyOrTooLargeEntries)})`
+      : undefined,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return clampText([summaryLines, ...sections].join("\n\n").trim(), params.maxChars);
+}
 
 function rejectOversizedBase64Payload(params: {
   data: string;
@@ -388,6 +551,25 @@ export async function extractFileContentFromSource(params: {
       text,
       images: extracted.images.length > 0 ? extracted.images : undefined,
     };
+  }
+
+  if (isZipMime(mimeType)) {
+    const text = await extractZipContent({
+      buffer,
+      filename,
+      maxChars: limits.maxChars,
+      pdf: limits.pdf,
+    });
+    return { filename, text };
+  }
+
+  if (isOfficeDocumentMime(mimeType)) {
+    const text = await extractOfficeContent({
+      buffer,
+      mimeType,
+      maxChars: limits.maxChars,
+    });
+    return { filename, text };
   }
 
   const text = clampText(decodeTextContent(buffer, charset), limits.maxChars);

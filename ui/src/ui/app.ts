@@ -1,5 +1,6 @@
 import { LitElement } from "lit";
 import { customElement, state } from "lit/decorators.js";
+import { DEFAULT_GATEWAY_ATTACHMENT_MAX_BYTES } from "../../../src/gateway/control-ui-contract.js";
 import { i18n, I18nController, isSupportedLocale } from "../i18n/index.ts";
 import {
   handleChannelConfigReload as handleChannelConfigReloadInternal,
@@ -165,6 +166,7 @@ export class OpenClawApp extends LitElement {
   @state() localMediaPreviewRoots: string[] = [];
   @state() embedSandboxMode: "strict" | "scripts" | "trusted" = "scripts";
   @state() allowExternalEmbedUrls = false;
+  @state() chatAttachmentMaxBytes = DEFAULT_GATEWAY_ATTACHMENT_MAX_BYTES;
   @state() serverVersion: string | null = null;
 
   @state() sessionKey = this.settings.sessionKey;

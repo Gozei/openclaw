@@ -690,15 +690,50 @@ describe("sendChatMessage", () => {
 
     expect(result).toBeNull();
     expect(state.lastError).toContain("origin not allowed");
-    expect(state.chatMessages.at(-1)).toMatchObject({
-      role: "assistant",
-      content: [
-        {
-          type: "text",
-          text: expect.stringContaining("origin not allowed"),
-        },
-      ],
+    expect(state.chatMessages).toEqual([]);
+  });
+
+  it("rolls back the optimistic user message when chat send fails", async () => {
+    const request = vi.fn().mockRejectedValue(new Error("upload failed"));
+    const existingMessages = [
+      { role: "assistant", content: [{ type: "text", text: "older reply" }] },
+    ];
+    const state = createState({
+      chatMessages: existingMessages,
+      connected: true,
+      client: { request } as unknown as ChatState["client"],
     });
+
+    const result = await sendChatMessage(state, "hello");
+
+    expect(result).toBeNull();
+    expect(state.chatMessages).toEqual(existingMessages);
+    expect(state.lastError).toContain("upload failed");
+  });
+
+  it("rejects oversized attachments before requesting chat.send", async () => {
+    const request = vi.fn();
+    const oversizedContent = Buffer.alloc(10_000_001).toString("base64");
+    const state = createState({
+      connected: true,
+      client: { request } as unknown as ChatState["client"],
+    });
+
+    const result = await sendChatMessage(state, "hello", [
+      {
+        id: "att-1",
+        mimeType: "application/pdf",
+        fileName: "lesson.pdf",
+        dataUrl: `data:application/pdf;base64,${oversizedContent}`,
+      },
+    ]);
+
+    expect(result).toBeNull();
+    expect(request).not.toHaveBeenCalled();
+    expect(state.chatMessages).toEqual([]);
+    expect(state.lastError).toContain("lesson.pdf");
+    expect(state.lastError).toContain("exceeds size limit");
+    expect(state.lastError).toContain("10.0 MB");
   });
 });
 

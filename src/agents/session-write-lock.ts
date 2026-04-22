@@ -1,6 +1,8 @@
 import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { finishPerfSpan, logPerfEvent, startPerfSpan, type PerfOutcome } from "../logging/perf.js";
+import { createTraceContext, type TraceContext } from "../logging/trace-context.js";
 import { getProcessStartTime, isPidAlive } from "../shared/pid-alive.js";
 import { resolveProcessScopedMap } from "../shared/process-scoped-map.js";
 
@@ -471,10 +473,24 @@ export async function acquireSessionWriteLock(params: {
   staleMs?: number;
   maxHoldMs?: number;
   allowReentrant?: boolean;
+  perf?: {
+    trace?: Partial<TraceContext>;
+    slowThresholdMs?: number;
+    details?: Record<string, unknown>;
+  };
 }): Promise<{
   release: () => Promise<void>;
 }> {
   registerCleanupHandlers();
+  const perfSpan = params.perf
+    ? startPerfSpan({
+        name: "agent.run.session_lock",
+        trace: createTraceContext(params.perf.trace),
+        details: params.perf.details,
+      })
+    : undefined;
+  let perfOutcome: PerfOutcome = "ok";
+  let perfErrorCode: string | undefined;
   const timeoutMs = resolvePositiveMs(params.timeoutMs, 10_000, { allowInfinity: true });
   const staleMs = resolvePositiveMs(params.staleMs, DEFAULT_STALE_MS);
   const maxHoldMs = resolvePositiveMs(params.maxHoldMs, DEFAULT_MAX_HOLD_MS);
@@ -494,6 +510,15 @@ export async function acquireSessionWriteLock(params: {
   const held = HELD_LOCKS.get(normalizedSessionFile);
   if (allowReentrant && held) {
     held.count += 1;
+    if (perfSpan) {
+      logPerfEvent(
+        finishPerfSpan(perfSpan, {
+          outcome: "ok",
+          slowThresholdMs: params.perf?.slowThresholdMs ?? 100,
+          details: { reentrant: true },
+        }),
+      );
+    }
     return {
       release: async () => {
         await releaseHeldLock(normalizedSessionFile, held);
@@ -523,6 +548,15 @@ export async function acquireSessionWriteLock(params: {
         maxHoldMs,
       };
       HELD_LOCKS.set(normalizedSessionFile, createdHeld);
+      if (perfSpan) {
+        logPerfEvent(
+          finishPerfSpan(perfSpan, {
+            outcome: "ok",
+            slowThresholdMs: params.perf?.slowThresholdMs ?? 100,
+            details: { reentrant: false, attempts: attempt },
+          }),
+        );
+      }
       return {
         release: async () => {
           await releaseHeldLock(normalizedSessionFile, createdHeld);
@@ -543,6 +577,19 @@ export async function acquireSessionWriteLock(params: {
       }
       const code = (err as { code?: unknown }).code;
       if (code !== "EEXIST") {
+        perfOutcome = "error";
+        perfErrorCode =
+          err instanceof Error && err.name.trim().length > 0 ? err.name : "session_lock_failed";
+        if (perfSpan) {
+          logPerfEvent(
+            finishPerfSpan(perfSpan, {
+              outcome: perfOutcome,
+              errorCode: perfErrorCode,
+              slowThresholdMs: params.perf?.slowThresholdMs ?? 100,
+              details: { attempts: attempt },
+            }),
+          );
+        }
         throw err;
       }
       const payload = await readLockPayload(lockPath);
@@ -573,7 +620,21 @@ export async function acquireSessionWriteLock(params: {
 
   const payload = await readLockPayload(lockPath);
   const owner = typeof payload?.pid === "number" ? `pid=${payload.pid}` : "unknown";
-  throw new Error(`session file locked (timeout ${timeoutMs}ms): ${owner} ${lockPath}`);
+  const timeoutError = new Error(
+    `session file locked (timeout ${timeoutMs}ms): ${owner} ${lockPath}`,
+  );
+  perfOutcome = "timeout";
+  perfErrorCode = "session_lock_timeout";
+  if (perfSpan) {
+    logPerfEvent(
+      finishPerfSpan(perfSpan, {
+        outcome: perfOutcome,
+        errorCode: perfErrorCode,
+        slowThresholdMs: params.perf?.slowThresholdMs ?? 100,
+      }),
+    );
+  }
+  throw timeoutError;
 }
 
 export const __testing = {

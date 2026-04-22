@@ -2793,6 +2793,148 @@ describe("chat view", () => {
     querySpy.mockRestore();
   });
 
+  it("renders non-image draft attachments as file cards", () => {
+    const container = document.createElement("div");
+    render(
+      renderChat(
+        createProps({
+          attachments: [
+            {
+              id: "att-doc",
+              dataUrl: "data:application/pdf;base64,QUJDRA==",
+              mimeType: "application/pdf",
+              fileName: "spec.pdf",
+            },
+          ],
+        }),
+      ),
+      container,
+    );
+
+    expect(container.querySelector(".chat-attachment-file")).not.toBeNull();
+    expect(container.querySelector<HTMLImageElement>(".chat-attachment-thumb img")).toBeNull();
+    expect(container.textContent).toContain("spec.pdf");
+    expect(container.textContent).toContain("document");
+  });
+
+  it("renders zip draft attachments with unpack/install guidance", () => {
+    const container = document.createElement("div");
+    render(
+      renderChat(
+        createProps({
+          attachments: [
+            {
+              id: "att-zip",
+              dataUrl: "data:application/zip;base64,UEsDBA==",
+              mimeType: "application/zip",
+              fileName: "bundle.zip",
+            },
+          ],
+        }),
+      ),
+      container,
+    );
+
+    expect(container.textContent).toContain("bundle.zip");
+    expect(container.textContent).toContain("zip archive");
+    expect(container.textContent).toContain("reads txt/csv/pdf/docx/xlsx/pptx");
+    expect(container.textContent).toContain("staged for unpack/install");
+  });
+
+  it("renders pptx draft attachments as presentation cards", () => {
+    const container = document.createElement("div");
+    render(
+      renderChat(
+        createProps({
+          attachments: [
+            {
+              id: "att-pptx",
+              dataUrl:
+                "data:application/vnd.openxmlformats-officedocument.presentationml.presentation;base64,UEsDBA==",
+              mimeType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+              fileName: "deck.pptx",
+            },
+          ],
+        }),
+      ),
+      container,
+    );
+
+    expect(container.textContent).toContain("deck.pptx");
+    expect(container.textContent).toContain("PPT");
+    expect(container.textContent).toContain("slides");
+    expect(container.textContent).toContain("presentation attachment");
+    expect(container.textContent).not.toContain("DOC");
+  });
+
+  it("renders assistant document attachments as stable file cards", () => {
+    const container = document.createElement("div");
+    render(
+      renderChat(
+        createProps({
+          messages: [
+            {
+              id: "assistant-doc-attachment",
+              role: "assistant",
+              content: [
+                {
+                  type: "attachment",
+                  attachment: {
+                    url: "https://example.com/spec.pdf",
+                    kind: "document",
+                    label: "spec.pdf",
+                    mimeType: "application/pdf",
+                  },
+                },
+              ],
+              timestamp: 1,
+            },
+          ],
+        }),
+      ),
+      container,
+    );
+
+    expect(container.querySelector(".chat-assistant-attachment-card--document")).not.toBeNull();
+    expect(container.textContent).toContain("PDF");
+    expect(container.textContent).toContain("spec.pdf");
+    expect(container.textContent).toContain("portable document format");
+  });
+
+  it("renders non-image base64 content blocks as document cards instead of broken images", () => {
+    const container = document.createElement("div");
+    render(
+      renderChat(
+        createProps({
+          messages: [
+            {
+              id: "user-pdf-image-block",
+              role: "user",
+              content: [
+                {
+                  type: "image",
+                  source: {
+                    type: "base64",
+                    media_type: "application/pdf",
+                    data: "JVBERi0xLjQK",
+                  },
+                  fileName: "spec.pdf",
+                },
+              ],
+              timestamp: 1,
+            },
+          ],
+        }),
+      ),
+      container,
+    );
+
+    expect(container.querySelector(".chat-message-image")).toBeNull();
+    expect(container.querySelector(".chat-assistant-attachment-card--document")).not.toBeNull();
+    expect(container.textContent).toContain("PDF");
+    expect(container.textContent).toContain("spec.pdf");
+  });
+
   it("does not re-normalize message history when only the draft changes", () => {
     const container = document.createElement("div");
     const props = createProps({

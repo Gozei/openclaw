@@ -27,6 +27,8 @@ import {
 } from "../../infra/outbound/agent-delivery.js";
 import { shouldDowngradeDeliveryToSessionOnly } from "../../infra/outbound/best-effort-delivery.js";
 import { resolveMessageChannelSelection } from "../../infra/outbound/channel-selection.js";
+import { finishPerfSpan, logPerfEvent, startPerfSpan } from "../../logging/perf.js";
+import { createTraceContext } from "../../logging/trace-context.js";
 import type { PromptImageOrderEntry } from "../../media/prompt-image-order.js";
 import { classifySessionKeyShape, normalizeAgentId } from "../../routing/session-key.js";
 import { defaultRuntime } from "../../runtime.js";
@@ -49,7 +51,11 @@ import {
   normalizeMessageChannel,
 } from "../../utils/message-channel.js";
 import { resolveAssistantIdentity } from "../assistant-identity.js";
-import { MediaOffloadError, parseMessageWithAttachments } from "../chat-attachments.js";
+import {
+  MediaOffloadError,
+  parseMessageWithAttachments,
+  resolveGatewayAttachmentMaxBytes,
+} from "../chat-attachments.js";
 import { resolveAssistantAvatarUrl } from "../control-ui-shared.js";
 import { ADMIN_SCOPE } from "../method-scopes.js";
 import { GATEWAY_CLIENT_CAPS, hasGatewayClientCap } from "../protocol/client-info.js";
@@ -283,7 +289,7 @@ function dispatchAgentRunFromGateway(params: {
 }
 
 export const agentHandlers: GatewayRequestHandlers = {
-  agent: async ({ params, respond, context, client, isWebchatConnect }) => {
+  agent: async ({ req, params, respond, context, client, isWebchatConnect }) => {
     const p = params;
     if (!validateAgentParams(p)) {
       respond(
@@ -408,7 +414,7 @@ export const agentHandlers: GatewayRequestHandlers = {
 
       try {
         const parsed = await parseMessageWithAttachments(message, normalizedAttachments, {
-          maxBytes: 5_000_000,
+          maxBytes: resolveGatewayAttachmentMaxBytes(cfg),
           log: context.logGateway,
           supportsImages,
         });
@@ -813,6 +819,22 @@ export const agentHandlers: GatewayRequestHandlers = {
       status: "accepted" as const,
       acceptedAt: Date.now(),
     };
+    const acceptSpan = startPerfSpan({
+      name: "gateway.request.agent.accept",
+      trace: createTraceContext({
+        requestId: req.id,
+        runId,
+        sessionId: resolvedSessionId,
+        agentId: normalizeAgentId(request.agentId) ?? "main",
+        method: req.method,
+      }),
+      details: {
+        hasSessionId: Boolean(resolvedSessionId),
+        hasSessionKey: Boolean(resolvedSessionKey),
+        deliver,
+        hasAttachments: images.length > 0,
+      },
+    });
     // Store an in-flight ack so retries do not spawn a second run.
     setGatewayDedupeEntry({
       dedupe: context.dedupe,
@@ -824,6 +846,7 @@ export const agentHandlers: GatewayRequestHandlers = {
       },
     });
     respond(true, accepted, undefined, { runId });
+    logPerfEvent(finishPerfSpan(acceptSpan, { slowThresholdMs: 120 }));
 
     if (resolvedSessionKey) {
       await reactivateCompletedSubagentSession({

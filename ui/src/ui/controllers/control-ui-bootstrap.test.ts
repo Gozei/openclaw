@@ -17,6 +17,7 @@ describe("loadControlUiBootstrapConfig", () => {
         localMediaPreviewRoots: ["/tmp/openclaw"],
         embedSandbox: "scripts",
         allowExternalEmbedUrls: true,
+        chatAttachmentMaxBytes: 12_000_000,
       }),
     });
     vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
@@ -29,6 +30,7 @@ describe("loadControlUiBootstrapConfig", () => {
       localMediaPreviewRoots: [],
       embedSandboxMode: "scripts" as const,
       allowExternalEmbedUrls: false,
+      chatAttachmentMaxBytes: 10_000_000,
       serverVersion: null,
     };
 
@@ -45,6 +47,7 @@ describe("loadControlUiBootstrapConfig", () => {
     expect(state.localMediaPreviewRoots).toEqual(["/tmp/openclaw"]);
     expect(state.embedSandboxMode).toBe("scripts");
     expect(state.allowExternalEmbedUrls).toBe(true);
+    expect(state.chatAttachmentMaxBytes).toBe(12_000_000);
 
     vi.unstubAllGlobals();
   });
@@ -61,6 +64,7 @@ describe("loadControlUiBootstrapConfig", () => {
       localMediaPreviewRoots: [],
       embedSandboxMode: "scripts" as const,
       allowExternalEmbedUrls: false,
+      chatAttachmentMaxBytes: 10_000_000,
       serverVersion: null,
     };
 
@@ -73,6 +77,7 @@ describe("loadControlUiBootstrapConfig", () => {
     expect(state.assistantName).toBe("Assistant");
     expect(state.embedSandboxMode).toBe("scripts");
     expect(state.allowExternalEmbedUrls).toBe(false);
+    expect(state.chatAttachmentMaxBytes).toBe(10_000_000);
 
     vi.unstubAllGlobals();
   });
@@ -89,6 +94,7 @@ describe("loadControlUiBootstrapConfig", () => {
       localMediaPreviewRoots: [],
       embedSandboxMode: "scripts" as const,
       allowExternalEmbedUrls: false,
+      chatAttachmentMaxBytes: 10_000_000,
       serverVersion: null,
     };
 

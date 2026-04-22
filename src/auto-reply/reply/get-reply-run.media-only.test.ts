@@ -256,26 +256,77 @@ describe("runPreparedReply media-only handling", () => {
     );
   });
 
-  it("allows media-only prompts and preserves thread context in queued followups", async () => {
-    const result = await runPreparedReply(baseParams());
-    expect(result).toEqual({ text: "ok" });
-
-    const call = vi.mocked(runReplyAgent).mock.calls[0]?.[0];
-    expect(call).toBeTruthy();
-    expect(call?.followupRun.prompt).toContain("[Thread history - for context]");
-    expect(call?.followupRun.prompt).toContain("Earlier message in this thread");
-    expect(call?.followupRun.prompt).toContain("[User sent media without caption]");
-  });
-
-  it("keeps thread history context on follow-up turns", async () => {
+  it("allows media-only prompts and prioritizes current attachments over thread context", async () => {
     const result = await runPreparedReply(
       baseParams({
-        isNewSession: false,
+        ctx: {
+          Body: "",
+          RawBody: "",
+          CommandBody: "",
+          ThreadHistoryBody: "Earlier message in this thread",
+          OriginatingChannel: "slack",
+          OriginatingTo: "C123",
+          ChatType: "group",
+          MediaPath: "/tmp/input.png",
+          MediaType: "image/png",
+        },
       }),
     );
     expect(result).toEqual({ text: "ok" });
 
     const call = vi.mocked(runReplyAgent).mock.calls[0]?.[0];
+    expect(call).toBeTruthy();
+    expect(call?.followupRun.prompt).not.toContain("[Thread history - for context]");
+    expect(call?.followupRun.prompt).not.toContain("Earlier message in this thread");
+    expect(call?.followupRun.prompt).toContain("[User sent media without caption]");
+    expect(call?.followupRun.prompt).toContain(
+      'resolve references like "this", "this file", "this output", "这个", "这个文件", and "这个输出" against the current turn attachment set first',
+    );
+  });
+
+  it("drops thread history context on attachment follow-up turns", async () => {
+    const result = await runPreparedReply(
+      baseParams({
+        isNewSession: false,
+        ctx: {
+          Body: "",
+          RawBody: "",
+          CommandBody: "",
+          ThreadHistoryBody: "Earlier message in this thread",
+          OriginatingChannel: "slack",
+          OriginatingTo: "C123",
+          ChatType: "group",
+          MediaPath: "/tmp/input.png",
+          MediaType: "image/png",
+        },
+      }),
+    );
+    expect(result).toEqual({ text: "ok" });
+
+    const call = vi.mocked(runReplyAgent).mock.calls[0]?.[0];
+    expect(call).toBeTruthy();
+    expect(call?.followupRun.prompt).not.toContain("[Thread history - for context]");
+    expect(call?.followupRun.prompt).not.toContain("Earlier message in this thread");
+  });
+
+  it("keeps thread history context on non-attachment follow-up turns", async () => {
+    const result = await runPreparedReply(
+      baseParams({
+        isNewSession: false,
+        sessionCtx: {
+          Body: "follow up on that",
+          BodyStripped: "follow up on that",
+          ThreadHistoryBody: "Earlier message in this thread",
+          Provider: "slack",
+          ChatType: "group",
+          OriginatingChannel: "slack",
+          OriginatingTo: "C123",
+        },
+      }),
+    );
+    expect(result).toEqual({ text: "ok" });
+
+    const call = vi.mocked(runReplyAgent).mock.calls.at(-1)?.[0];
     expect(call).toBeTruthy();
     expect(call?.followupRun.prompt).toContain("[Thread history - for context]");
     expect(call?.followupRun.prompt).toContain("Earlier message in this thread");

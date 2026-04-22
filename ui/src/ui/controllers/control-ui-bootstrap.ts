@@ -1,5 +1,6 @@
 import {
   CONTROL_UI_BOOTSTRAP_CONFIG_PATH,
+  DEFAULT_GATEWAY_ATTACHMENT_MAX_BYTES,
   type ControlUiBootstrapConfig,
   type ControlUiEmbedSandboxMode,
 } from "../../../../src/gateway/control-ui-contract.js";
@@ -15,6 +16,7 @@ export type ControlUiBootstrapState = {
   localMediaPreviewRoots: string[];
   embedSandboxMode: ControlUiEmbedSandboxMode;
   allowExternalEmbedUrls: boolean;
+  chatAttachmentMaxBytes: number;
 };
 
 export async function loadControlUiBootstrapConfig(state: ControlUiBootstrapState) {
@@ -59,6 +61,11 @@ export async function loadControlUiBootstrapConfig(state: ControlUiBootstrapStat
           ? "strict"
           : "scripts";
     state.allowExternalEmbedUrls = parsed.allowExternalEmbedUrls === true;
+    state.chatAttachmentMaxBytes =
+      typeof parsed.chatAttachmentMaxBytes === "number" &&
+      Number.isFinite(parsed.chatAttachmentMaxBytes)
+        ? parsed.chatAttachmentMaxBytes
+        : DEFAULT_GATEWAY_ATTACHMENT_MAX_BYTES;
   } catch {
     // Ignore bootstrap failures; UI will update identity after connecting.
   }

@@ -1,3 +1,10 @@
+import {
+  finishPerfSpan,
+  getDefaultPerfThresholds,
+  logPerfEvent,
+  startPerfSpan,
+} from "../logging/perf.js";
+import { createTraceContext } from "../logging/trace-context.js";
 import { withPluginRuntimeGatewayRequestScope } from "../plugins/runtime/gateway-request-scope.js";
 import { formatControlPlaneActor, resolveControlPlaneActor } from "./control-plane-audit.js";
 import { consumeControlPlaneWriteBudget } from "./control-plane-rate-limit.js";
@@ -105,13 +112,59 @@ export async function handleGatewayRequest(
   opts: GatewayRequestOptions & { extraHandlers?: GatewayRequestHandlers },
 ): Promise<void> {
   const { req, respond, client, isWebchatConnect, context } = opts;
+  const thresholds = getDefaultPerfThresholds();
+  const trace = createTraceContext({
+    requestId: req.id,
+    method: req.method,
+  });
+  const totalSpan = startPerfSpan({
+    name: "gateway.request.total",
+    trace,
+    details: {
+      method: req.method,
+      hasClient: Boolean(client),
+      clientRole: client?.connect?.role,
+      clientMode: client?.connect?.client?.mode,
+      scopesCount: Array.isArray(client?.connect?.scopes) ? client.connect.scopes.length : 0,
+    },
+  });
+  let loggedTotal = false;
+  const logTotal = (params: {
+    ok: boolean;
+    errorCode?: string;
+    details?: Record<string, unknown>;
+  }) => {
+    if (loggedTotal) {
+      return;
+    }
+    loggedTotal = true;
+    logPerfEvent(
+      finishPerfSpan(totalSpan, {
+        outcome: params.ok ? "ok" : "error",
+        errorCode: params.errorCode,
+        details: params.details,
+        slowThresholdMs: thresholds.gatewayMethodMs,
+      }),
+    );
+  };
+  const instrumentedRespond: typeof respond = (ok, payload, error, meta) => {
+    logTotal({
+      ok,
+      errorCode: error?.code,
+      details:
+        meta && Object.keys(meta).length > 0
+          ? { responseMetaKeys: Object.keys(meta).toSorted() }
+          : undefined,
+    });
+    respond(ok, payload, error, meta);
+  };
   const authError = authorizeGatewayMethod(req.method, client);
   if (authError) {
-    respond(false, undefined, authError);
+    instrumentedRespond(false, undefined, authError);
     return;
   }
   if (context.unavailableGatewayMethods?.has(req.method)) {
-    respond(
+    instrumentedRespond(
       false,
       undefined,
       errorShape(ErrorCodes.UNAVAILABLE, `${req.method} unavailable during gateway startup`, {
@@ -129,7 +182,7 @@ export async function handleGatewayRequest(
       context.logGateway.warn(
         `control-plane write rate-limited method=${req.method} ${formatControlPlaneActor(actor)} retryAfterMs=${budget.retryAfterMs} key=${budget.key}`,
       );
-      respond(
+      instrumentedRespond(
         false,
         undefined,
         errorShape(
@@ -150,7 +203,7 @@ export async function handleGatewayRequest(
   }
   const handler = opts.extraHandlers?.[req.method] ?? coreGatewayHandlers[req.method];
   if (!handler) {
-    respond(
+    instrumentedRespond(
       false,
       undefined,
       errorShape(ErrorCodes.INVALID_REQUEST, `unknown method: ${req.method}`),
@@ -163,11 +216,31 @@ export async function handleGatewayRequest(
       params: (req.params ?? {}) as Record<string, unknown>,
       client,
       isWebchatConnect,
-      respond,
+      respond: instrumentedRespond,
       context,
     });
   // All handlers run inside a request scope so that plugin runtime
   // subagent methods (e.g. context engine tools spawning sub-agents
   // during tool execution) can dispatch back into the gateway.
-  await withPluginRuntimeGatewayRequestScope({ context, client, isWebchatConnect }, invokeHandler);
+  try {
+    await withPluginRuntimeGatewayRequestScope(
+      { context, client, isWebchatConnect },
+      invokeHandler,
+    );
+    logTotal({
+      ok: true,
+      details: { responseDeferred: true },
+    });
+  } catch (error) {
+    const code =
+      error && typeof error === "object" && "code" in error && typeof error.code === "string"
+        ? error.code
+        : undefined;
+    logTotal({
+      ok: false,
+      errorCode: code,
+      details: { threw: true },
+    });
+    throw error;
+  }
 }

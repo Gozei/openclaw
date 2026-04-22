@@ -393,11 +393,13 @@ export async function runPreparedReply(
   const prefixedBodyCore = prefixedBodyBase;
   const threadStarterBody = normalizeOptionalString(ctx.ThreadStarterBody);
   const threadHistoryBody = normalizeOptionalString(ctx.ThreadHistoryBody);
-  const threadContextNote = threadHistoryBody
-    ? `[Thread history - for context]\n${threadHistoryBody}`
-    : threadStarterBody
-      ? `[Thread starter - for context]\n${threadStarterBody}`
-      : undefined;
+  const threadContextNote = hasMediaAttachment
+    ? undefined
+    : threadHistoryBody
+      ? `[Thread history - for context]\n${threadHistoryBody}`
+      : threadStarterBody
+        ? `[Thread starter - for context]\n${threadStarterBody}`
+        : undefined;
   const drainedSystemEventBlocks: string[] = [];
   let forceSenderIsOwnerFalseFromSystemEvents = false;
   const rebuildPromptBodies = async (): Promise<{

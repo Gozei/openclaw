@@ -31,6 +31,27 @@ function formatMediaAttachedLine(params: {
   return `${prefix}${path}${typePart}${urlPart}]`;
 }
 
+function isZipMediaType(type: string | undefined): boolean {
+  const normalized = normalizeLowercaseStringOrEmpty(type);
+  return normalized === "application/zip" || normalized === "application/x-zip-compressed";
+}
+
+function formatArchiveReadyLine(params: {
+  path: string;
+  type?: string;
+  index?: number;
+  total?: number;
+}): string {
+  const prefix =
+    typeof params.index === "number" && typeof params.total === "number"
+      ? `[archive ready ${params.index}/${params.total}: `
+      : "[archive ready: ";
+  const path = sanitizeInlineMediaNoteValue(params.path);
+  const typeRaw = sanitizeInlineMediaNoteValue(params.type);
+  const typePart = typeRaw ? ` (${typeRaw})` : "";
+  return `${prefix}${path}${typePart} | local path available for unpack/install]`;
+}
+
 // Common audio file extensions for transcription detection
 const AUDIO_EXTENSIONS = new Set([
   ".ogg",
@@ -159,11 +180,22 @@ export function buildInboundMediaNote(ctx: MsgContext): string | undefined {
     return undefined;
   }
   if (entries.length === 1) {
-    return formatMediaAttachedLine({
-      path: entries[0]?.path ?? "",
-      type: entries[0]?.type,
-      url: entries[0]?.url,
-    });
+    const lines = [
+      formatMediaAttachedLine({
+        path: entries[0]?.path ?? "",
+        type: entries[0]?.type,
+        url: entries[0]?.url,
+      }),
+    ];
+    if (isZipMediaType(entries[0]?.type)) {
+      lines.push(
+        formatArchiveReadyLine({
+          path: entries[0]?.path ?? "",
+          type: entries[0]?.type,
+        }),
+      );
+    }
+    return lines.join("\n");
   }
 
   const count = entries.length;
@@ -178,6 +210,16 @@ export function buildInboundMediaNote(ctx: MsgContext): string | undefined {
         url: entry.url,
       }),
     );
+    if (isZipMediaType(entry.type)) {
+      lines.push(
+        formatArchiveReadyLine({
+          path: entry.path,
+          index: idx + 1,
+          total: count,
+          type: entry.type,
+        }),
+      );
+    }
   }
   return lines.join("\n");
 }

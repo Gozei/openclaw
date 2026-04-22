@@ -95,6 +95,7 @@ export type EmbeddedPiSubscribeContext = {
   hookRunner?: HookRunner;
   builtinToolNames?: ReadonlySet<string>;
   noteLastAssistant: (msg: AgentMessage) => void;
+  noteFirstToken: () => void;
 
   shouldEmitToolResult: () => boolean;
   shouldEmitToolOutput: () => boolean;

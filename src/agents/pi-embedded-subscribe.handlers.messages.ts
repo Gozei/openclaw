@@ -423,6 +423,7 @@ export function handleMessageUpdate(
           })
           .trim());
   if (next) {
+    ctx.noteFirstToken();
     const wasThinking = ctx.state.partialBlockState.thinking;
     const visibleDelta = chunk ? ctx.stripBlockTags(chunk, ctx.state.partialBlockState) : "";
     if (!wasThinking && ctx.state.partialBlockState.thinking) {

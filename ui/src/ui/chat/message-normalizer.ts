@@ -144,6 +144,114 @@ function inferAttachmentKind(url: string): {
   return { kind, mimeType, label };
 }
 
+function inferAttachmentLabel(url?: string, fallbackLabel?: string, mimeType?: string): string {
+  const explicit = fallbackLabel?.trim();
+  if (explicit) {
+    return explicit;
+  }
+  if (url) {
+    return inferAttachmentKind(url).label;
+  }
+  if (mimeType === "application/pdf") {
+    return "document.pdf";
+  }
+  if (mimeType === "application/zip" || mimeType === "application/x-zip-compressed") {
+    return "archive.zip";
+  }
+  if (mimeType?.startsWith("audio/")) {
+    return "audio attachment";
+  }
+  if (mimeType?.startsWith("video/")) {
+    return "video attachment";
+  }
+  if (mimeType?.startsWith("image/")) {
+    return "image attachment";
+  }
+  return "attachment";
+}
+
+function normalizeImageLikeContentItem(item: Record<string, unknown>): MessageContentItem[] | null {
+  if (item.type !== "image" && item.type !== "image_url") {
+    return null;
+  }
+
+  if (item.type === "image") {
+    const source = item.source as Record<string, unknown> | undefined;
+    const sourceType = typeof source?.type === "string" ? source.type : undefined;
+    const mimeType = typeof source?.media_type === "string" ? source.media_type : undefined;
+    const kind = mediaKindFromMime(mimeType) ?? "document";
+    const data = typeof source?.data === "string" ? source.data : undefined;
+    const url = typeof item.url === "string" ? item.url : undefined;
+    const explicitLabel =
+      typeof item.fileName === "string"
+        ? item.fileName
+        : typeof item.alt === "string"
+          ? item.alt
+          : undefined;
+
+    if (kind === "image" && sourceType === "base64" && data) {
+      return [];
+    }
+    if (kind === "image" && url) {
+      return [];
+    }
+
+    if (sourceType === "base64" && data) {
+      const normalizedUrl = data.startsWith("data:")
+        ? data
+        : `data:${mimeType ?? "application/octet-stream"};base64,${data}`;
+      return [
+        {
+          type: "attachment",
+          attachment: {
+            url: normalizedUrl,
+            kind,
+            label: inferAttachmentLabel(undefined, explicitLabel, mimeType),
+            ...(mimeType ? { mimeType } : {}),
+          },
+        },
+      ];
+    }
+
+    if (url) {
+      const inferred = inferAttachmentKind(url);
+      return [
+        {
+          type: "attachment",
+          attachment: {
+            url,
+            kind,
+            label: inferAttachmentLabel(url, explicitLabel, mimeType),
+            ...(mimeType ? { mimeType } : inferred.mimeType ? { mimeType: inferred.mimeType } : {}),
+          },
+        },
+      ];
+    }
+
+    return [];
+  }
+
+  const imageUrl = item.image_url as Record<string, unknown> | undefined;
+  const url = typeof imageUrl?.url === "string" ? imageUrl.url : undefined;
+  if (!url) {
+    return [];
+  }
+  const inferred = inferAttachmentKind(url);
+  return inferred.kind === "image"
+    ? []
+    : [
+        {
+          type: "attachment",
+          attachment: {
+            url,
+            kind: inferred.kind,
+            label: inferred.label,
+            ...(inferred.mimeType ? { mimeType: inferred.mimeType } : {}),
+          },
+        },
+      ];
+}
+
 function mergeAdjacentTextItems(items: MessageContentItem[]): MessageContentItem[] {
   const merged: MessageContentItem[] = [];
   for (const item of items) {
@@ -282,6 +390,10 @@ export function normalizeMessage(message: unknown): NormalizedMessage {
     }
   } else if (Array.isArray(m.content)) {
     content = m.content.flatMap((item: Record<string, unknown>) => {
+      const normalizedImageLike = normalizeImageLikeContentItem(item);
+      if (normalizedImageLike) {
+        return normalizedImageLike;
+      }
       if (
         item.type === "attachment" &&
         item.attachment &&

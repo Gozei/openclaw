@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { registerLogTransport, resetLogger, setLoggerOverride } from "../logging/logger.js";
 
 const FAKE_STARTTIME = 12345;
 let __testing: typeof import("./session-write-lock.js").__testing;
@@ -107,6 +108,51 @@ describe("acquireSessionWriteLock", () => {
   afterEach(() => {
     resetSessionWriteLockStateForTest();
     vi.restoreAllMocks();
+    setLoggerOverride(null);
+    resetLogger();
+  });
+
+  it("logs session lock perf events when requested", async () => {
+    setLoggerOverride({ level: "debug", consoleLevel: "silent" });
+    const records: Array<Record<string, unknown>> = [];
+    const unregister = registerLogTransport((record) => {
+      records.push(record);
+    });
+
+    try {
+      await withTempSessionLockFile(async ({ sessionFile }) => {
+        const lock = await acquireSessionWriteLock({
+          sessionFile,
+          timeoutMs: 500,
+          perf: {
+            trace: {
+              runId: "run-lock",
+              sessionId: "session-lock",
+              agentId: "main",
+              method: "agent",
+            },
+          },
+        });
+        await lock.release();
+      });
+    } finally {
+      unregister();
+    }
+
+    const perfRecords = records.filter(
+      (record) => (record[1] as { name?: string } | undefined)?.name === "agent.run.session_lock",
+    );
+
+    expect(perfRecords).toHaveLength(1);
+    expect(perfRecords[0]?.[1]).toMatchObject({
+      kind: "perf",
+      name: "agent.run.session_lock",
+      runId: "run-lock",
+      sessionId: "session-lock",
+      agentId: "main",
+      method: "agent",
+      outcome: "ok",
+    });
   });
   it("reuses locks across symlinked session paths", async () => {
     if (process.platform === "win32") {

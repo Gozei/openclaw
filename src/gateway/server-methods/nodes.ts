@@ -19,6 +19,8 @@ import {
   resolveApnsAuthConfigFromEnv,
   resolveApnsRelayConfigFromEnv,
 } from "../../infra/push-apns.js";
+import { finishPerfSpan, logPerfEvent, startPerfSpan } from "../../logging/perf.js";
+import { createTraceContext } from "../../logging/trace-context.js";
 import {
   normalizeLowercaseStringOrEmpty,
   normalizeOptionalString,
@@ -858,9 +860,50 @@ export const nodeHandlers: GatewayRequestHandlers = {
     );
   },
   "node.invoke": async ({ params, respond, context, client, req }) => {
+    const totalSpan = startPerfSpan({
+      name: "gateway.request.nodes.total",
+      trace: createTraceContext({
+        requestId: req.id,
+        method: req.method,
+      }),
+    });
+    let loggedTotal = false;
+    const logTotal = (params: {
+      ok: boolean;
+      errorCode?: string;
+      details?: Record<string, unknown>;
+    }) => {
+      if (loggedTotal) {
+        return;
+      }
+      loggedTotal = true;
+      logPerfEvent(
+        finishPerfSpan(totalSpan, {
+          outcome: params.ok ? "ok" : "error",
+          errorCode: params.errorCode,
+          details: params.details,
+          slowThresholdMs: 150,
+        }),
+      );
+    };
+    const instrumentedRespond: typeof respond = (ok, payload, error, meta) => {
+      logTotal({
+        ok,
+        errorCode: error?.code,
+        details:
+          meta && Object.keys(meta).length > 0
+            ? { responseMetaKeys: Object.keys(meta).toSorted() }
+            : undefined,
+      });
+      if (meta === undefined) {
+        respond(ok, payload, error);
+        return;
+      }
+      respond(ok, payload, error, meta);
+    };
     if (!validateNodeInvokeParams(params)) {
       respondInvalidParams({
-        respond,
+        respond: instrumentedRespond,
         method: "node.invoke",
         validator: validateNodeInvokeParams,
       });
@@ -876,7 +919,7 @@ export const nodeHandlers: GatewayRequestHandlers = {
     const nodeId = normalizeOptionalString(p.nodeId) ?? "";
     const command = normalizeOptionalString(p.command) ?? "";
     if (!nodeId || !command) {
-      respond(
+      instrumentedRespond(
         false,
         undefined,
         errorShape(ErrorCodes.INVALID_REQUEST, "nodeId and command required"),
@@ -884,7 +927,7 @@ export const nodeHandlers: GatewayRequestHandlers = {
       return;
     }
     if (command === "system.execApprovals.get" || command === "system.execApprovals.set") {
-      respond(
+      instrumentedRespond(
         false,
         undefined,
         errorShape(
@@ -896,7 +939,7 @@ export const nodeHandlers: GatewayRequestHandlers = {
       return;
     }
     if (command === "browser.proxy" && isForbiddenBrowserProxyMutation(p.params)) {
-      respond(
+      instrumentedRespond(
         false,
         undefined,
         errorShape(
@@ -908,7 +951,7 @@ export const nodeHandlers: GatewayRequestHandlers = {
       return;
     }
 
-    await respondUnavailableOnThrow(respond, async () => {
+    await respondUnavailableOnThrow(instrumentedRespond, async () => {
       let nodeSession = context.nodeRegistry.get(nodeId);
       if (!nodeSession) {
         const wakeReqId = req.id;
@@ -975,7 +1018,7 @@ export const nodeHandlers: GatewayRequestHandlers = {
             `node wake done node=${nodeId} req=${wakeReqId} connected=false ` +
               `reason=not_connected totalMs=${totalDurationMs}`,
           );
-          respond(
+          instrumentedRespond(
             false,
             undefined,
             errorShape(ErrorCodes.UNAVAILABLE, "node not connected", {
@@ -999,7 +1042,7 @@ export const nodeHandlers: GatewayRequestHandlers = {
       });
       if (!allowed.ok) {
         const hint = buildNodeCommandRejectionHint(allowed.reason, command, nodeSession);
-        respond(
+        instrumentedRespond(
           false,
           undefined,
           errorShape(ErrorCodes.INVALID_REQUEST, hint, {
@@ -1016,7 +1059,7 @@ export const nodeHandlers: GatewayRequestHandlers = {
         execApprovalManager: context.execApprovalManager,
       });
       if (!forwardedParams.ok) {
-        respond(
+        instrumentedRespond(
           false,
           undefined,
           errorShape(ErrorCodes.INVALID_REQUEST, forwardedParams.message, {
@@ -1052,7 +1095,7 @@ export const nodeHandlers: GatewayRequestHandlers = {
             `node pending queued node=${nodeId} req=${req.id} command=${command} ` +
               `queuedId=${queued.id} wakePath=${wake.path} wakeAvailable=${wake.available}`,
           );
-          respond(
+          instrumentedRespond(
             false,
             undefined,
             errorShape(
@@ -1079,13 +1122,13 @@ export const nodeHandlers: GatewayRequestHandlers = {
           );
           return;
         }
-        if (!respondUnavailableOnNodeInvokeError(respond, res)) {
+        if (!respondUnavailableOnNodeInvokeError(instrumentedRespond, res)) {
           return;
         }
         return;
       }
       const payload = res.payloadJSON ? safeParseJson(res.payloadJSON) : res.payload;
-      respond(
+      instrumentedRespond(
         true,
         {
           ok: true,

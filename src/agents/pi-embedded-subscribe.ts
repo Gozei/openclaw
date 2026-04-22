@@ -5,7 +5,9 @@ import { createStreamingDirectiveAccumulator } from "../auto-reply/reply/streami
 import { isSilentReplyText, SILENT_REPLY_TOKEN } from "../auto-reply/tokens.js";
 import { formatToolAggregate } from "../auto-reply/tool-meta.js";
 import { emitAgentEvent } from "../infra/agent-events.js";
+import { finishPerfSpan, logPerfEvent } from "../logging/perf.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
+import { createTraceContext } from "../logging/trace-context.js";
 import type { InlineCodeState } from "../markdown/code-spans.js";
 import { buildCodeSpanIndex, createInlineCodeState } from "../markdown/code-spans.js";
 import { normalizeOptionalString } from "../shared/string-coerce.js";
@@ -71,6 +73,24 @@ export function subscribeEmbeddedPiSession(params: SubscribeEmbeddedPiSessionPar
   const toolResultFormat = params.toolResultFormat ?? "markdown";
   const useMarkdown = toolResultFormat === "markdown";
   const initialPendingToolMediaUrls = collectPendingMediaFromInternalEvents(params.internalEvents);
+  const firstTokenSpan =
+    typeof params.firstTokenStartedAtMs === "number" &&
+    Number.isFinite(params.firstTokenStartedAtMs) &&
+    params.firstTokenStartedAtMs > 0
+      ? {
+          name: "agent.run.first_token",
+          trace: createTraceContext({
+            runId: params.runId,
+            sessionId: params.sessionId,
+            agentId: params.agentId,
+            method: "agent",
+          }),
+          startedAtMs: params.firstTokenStartedAtMs,
+          startedAtIso: new Date(params.firstTokenStartedAtMs).toISOString(),
+          details: undefined,
+        }
+      : undefined;
+  let firstTokenLogged = false;
   const state: EmbeddedPiSubscribeState = {
     assistantTexts: [],
     toolMetas: [],
@@ -246,8 +266,21 @@ export function subscribeEmbeddedPiSession(params: SubscribeEmbeddedPiSessionPar
     if (shouldSkipAssistantText(text)) {
       return;
     }
+    noteFirstToken();
     assistantTexts.push(text);
     rememberAssistantText(text);
+  };
+
+  const noteFirstToken = () => {
+    if (!firstTokenSpan || firstTokenLogged) {
+      return;
+    }
+    firstTokenLogged = true;
+    logPerfEvent(
+      finishPerfSpan(firstTokenSpan, {
+        slowThresholdMs: 1500,
+      }),
+    );
   };
 
   const finalizeAssistantTexts = (args: {
@@ -731,6 +764,7 @@ export function subscribeEmbeddedPiSession(params: SubscribeEmbeddedPiSessionPar
     hookRunner: params.hookRunner,
     builtinToolNames: params.builtinToolNames,
     noteLastAssistant,
+    noteFirstToken,
     shouldEmitToolResult,
     shouldEmitToolOutput,
     emitToolSummary,

@@ -65,4 +65,76 @@ describe("getReplyFromConfig media note plumbing", () => {
     );
     expect(prompt).toContain(describedBody);
   });
+
+  it("adds archive handling guidance when a zip attachment is present", () => {
+    const sessionCtx = finalizeInboundContext({
+      Body: "please unpack this and install it",
+      BodyForAgent: "please unpack this and install it",
+      From: "+1001",
+      To: "+2000",
+      MediaPath: "/tmp/media-store/bundle.zip",
+      MediaUrl: "https://example.com/bundle.zip",
+      MediaType: "application/zip",
+    });
+    const promptBodies = buildReplyPromptBodies({
+      ctx: sessionCtx,
+      sessionCtx,
+      effectiveBaseBody: sessionCtx.BodyForAgent,
+      prefixedBody: sessionCtx.BodyForAgent,
+    });
+
+    expect(promptBodies.archiveReplyHint).toContain(
+      "treat its staged local path as actionable input",
+    );
+    expect(promptBodies.fileWorkHint).toContain(
+      "Treat attached files and their staged local paths as primary task inputs",
+    );
+    expect(promptBodies.attachmentScopeHint).toContain(
+      "Only the files listed in the current attachment note for this turn",
+    );
+    expect(promptBodies.currentAttachmentFocusHint).toContain(
+      'resolve references like "this", "this file", "this output", "这个", "这个文件", and "这个输出" against the current turn attachment set first',
+    );
+    expect(promptBodies.prefixedCommandBody).toContain(
+      "[archive ready: /tmp/media-store/bundle.zip (application/zip) | local path available for unpack/install]",
+    );
+    expect(promptBodies.prefixedCommandBody).toContain(
+      "unpack it into the workspace when needed, then analyze, install, run",
+    );
+  });
+
+  it("adds direct file-work guidance for document attachments", () => {
+    const sessionCtx = finalizeInboundContext({
+      Body: "read this document and summarize the key actions",
+      BodyForAgent: "read this document and summarize the key actions",
+      From: "+1001",
+      To: "+2000",
+      MediaPath: "/tmp/media-store/brief.pdf",
+      MediaUrl: "https://example.com/brief.pdf",
+      MediaType: "application/pdf",
+    });
+    const promptBodies = buildReplyPromptBodies({
+      ctx: sessionCtx,
+      sessionCtx,
+      effectiveBaseBody: sessionCtx.BodyForAgent,
+      prefixedBody: sessionCtx.BodyForAgent,
+    });
+
+    expect(promptBodies.fileWorkHint).toContain(
+      "Prefer inspecting or reading the actual uploaded files first",
+    );
+    expect(promptBodies.attachmentScopeHint).toContain(
+      "Do not automatically inspect older uploaded files",
+    );
+    expect(promptBodies.currentAttachmentFocusHint).toContain(
+      "Do not summarize prior assistant outputs when the current turn attachment set is present",
+    );
+    expect(promptBodies.archiveReplyHint).toBeUndefined();
+    expect(promptBodies.prefixedCommandBody).toContain(
+      "[media attached: /tmp/media-store/brief.pdf (application/pdf) | https://example.com/brief.pdf]",
+    );
+    expect(promptBodies.prefixedCommandBody).toContain(
+      "extract the relevant sections, tables, or structure you need",
+    );
+  });
 });

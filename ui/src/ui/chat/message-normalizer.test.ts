@@ -312,6 +312,35 @@ describe("message-normalizer", () => {
       ]);
     });
 
+    it("normalizes non-image base64 image blocks into document attachments", () => {
+      const result = normalizeMessage({
+        role: "user",
+        content: [
+          {
+            type: "image",
+            source: {
+              type: "base64",
+              media_type: "application/pdf",
+              data: "JVBERi0xLjQK",
+            },
+            fileName: "spec.pdf",
+          },
+        ],
+      });
+
+      expect(result.content).toEqual([
+        {
+          type: "attachment",
+          attachment: {
+            url: "data:application/pdf;base64,JVBERi0xLjQK",
+            kind: "document",
+            label: "spec.pdf",
+            mimeType: "application/pdf",
+          },
+        },
+      ]);
+    });
+
     it("detects tool result by toolCallId", () => {
       const result = normalizeMessage({
         role: "assistant",

@@ -1,5 +1,6 @@
 import type { AssistantMessage } from "@mariozechner/pi-ai";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { registerLogTransport, resetLogger, setLoggerOverride } from "../logging/logger.js";
 import {
   THINKING_TAG_CASES,
   createStubSessionHarness,
@@ -10,6 +11,11 @@ import {
   findLifecycleErrorAgentEvent,
 } from "./pi-embedded-subscribe.e2e-harness.js";
 import { subscribeEmbeddedPiSession } from "./pi-embedded-subscribe.js";
+
+afterEach(() => {
+  setLoggerOverride(null);
+  resetLogger();
+});
 
 describe("subscribeEmbeddedPiSession", () => {
   async function flushBlockReplyCallbacks(): Promise<void> {
@@ -207,6 +213,43 @@ describe("subscribeEmbeddedPiSession", () => {
     resolveToolResult?.();
     await Promise.resolve();
     expect(onPartialReply).not.toHaveBeenCalled();
+  });
+
+  it("logs first token latency when the first assistant text arrives", () => {
+    setLoggerOverride({ level: "debug", consoleLevel: "silent" });
+    const records: Array<Record<string, unknown>> = [];
+    const unregister = registerLogTransport((record) => {
+      records.push(record);
+    });
+
+    try {
+      const { emit } = createSubscribedHarness({
+        runId: "run-first-token",
+        sessionId: "session-first-token",
+        agentId: "main",
+        firstTokenStartedAtMs: Date.now() - 25,
+      });
+
+      emitAssistantTextDelta(emit, "Hello");
+      emitAssistantTextDelta(emit, " again");
+    } finally {
+      unregister();
+    }
+
+    const firstTokenRecords = records.filter(
+      (record) => (record[1] as { name?: string } | undefined)?.name === "agent.run.first_token",
+    );
+
+    expect(firstTokenRecords).toHaveLength(1);
+    expect(firstTokenRecords[0]?.[1]).toMatchObject({
+      kind: "perf",
+      name: "agent.run.first_token",
+      runId: "run-first-token",
+      sessionId: "session-first-token",
+      agentId: "main",
+      method: "agent",
+      outcome: "ok",
+    });
   });
 
   it("blocks local MEDIA urls from case-variant tool names in verbose output", async () => {

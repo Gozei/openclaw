@@ -20,6 +20,8 @@ import { buildOutboundSessionContext } from "../../infra/outbound/session-contex
 import { maybeResolveIdLikeTarget } from "../../infra/outbound/target-resolver.js";
 import { resolveOutboundTarget } from "../../infra/outbound/targets.js";
 import { extractToolPayload } from "../../infra/outbound/tool-payload.js";
+import { finishPerfSpan, logPerfEvent, startPerfSpan } from "../../logging/perf.js";
+import { createTraceContext } from "../../logging/trace-context.js";
 import { normalizePollInput } from "../../polls.js";
 import {
   normalizeOptionalLowercaseString,
@@ -303,10 +305,51 @@ export const sendHandlers: GatewayRequestHandlers = {
       inflightMap.delete(dedupeKey);
     }
   },
-  send: async ({ params, respond, context, client }) => {
+  send: async ({ req, params, respond, context, client }) => {
+    const totalSpan = startPerfSpan({
+      name: "gateway.request.send.total",
+      trace: createTraceContext({
+        requestId: req.id,
+        method: req.method,
+      }),
+    });
+    let loggedTotal = false;
+    const logTotal = (params: {
+      ok: boolean;
+      errorCode?: string;
+      details?: Record<string, unknown>;
+    }) => {
+      if (loggedTotal) {
+        return;
+      }
+      loggedTotal = true;
+      logPerfEvent(
+        finishPerfSpan(totalSpan, {
+          outcome: params.ok ? "ok" : "error",
+          errorCode: params.errorCode,
+          details: params.details,
+          slowThresholdMs: 120,
+        }),
+      );
+    };
+    const instrumentedRespond: typeof respond = (ok, payload, error, meta) => {
+      logTotal({
+        ok,
+        errorCode: error?.code,
+        details:
+          meta && Object.keys(meta).length > 0
+            ? { responseMetaKeys: Object.keys(meta).toSorted() }
+            : undefined,
+      });
+      if (meta === undefined) {
+        respond(ok, payload, error);
+        return;
+      }
+      respond(ok, payload, error, meta);
+    };
     const p = params;
     if (!validateSendParams(p)) {
-      respond(
+      instrumentedRespond(
         false,
         undefined,
         errorShape(
@@ -333,7 +376,7 @@ export const sendHandlers: GatewayRequestHandlers = {
     const dedupeKey = `send:${idem}`;
     const cached = context.dedupe.get(dedupeKey);
     if (cached) {
-      respond(cached.ok, cached.payload, cached.error, {
+      instrumentedRespond(cached.ok, cached.payload, cached.error, {
         cached: true,
       });
       return;
@@ -343,7 +386,7 @@ export const sendHandlers: GatewayRequestHandlers = {
     if (inflight) {
       const result = await inflight;
       const meta = result.meta ? { ...result.meta, cached: true } : { cached: true };
-      respond(result.ok, result.payload, result.error, meta);
+      instrumentedRespond(result.ok, result.payload, result.error, meta);
       return;
     }
     const to = normalizeOptionalString(request.to) ?? "";
@@ -355,7 +398,7 @@ export const sendHandlers: GatewayRequestHandlers = {
           .filter((entry): entry is string => Boolean(entry))
       : undefined;
     if (!message && !mediaUrl && (mediaUrls?.length ?? 0) === 0) {
-      respond(
+      instrumentedRespond(
         false,
         undefined,
         errorShape(ErrorCodes.INVALID_REQUEST, "invalid send params: text or media is required"),
@@ -368,7 +411,7 @@ export const sendHandlers: GatewayRequestHandlers = {
       rejectWebchatAsInternalOnly: true,
     });
     if ("error" in resolvedChannel) {
-      respond(false, undefined, resolvedChannel.error);
+      instrumentedRespond(false, undefined, resolvedChannel.error);
       return;
     }
     const { cfg, channel } = resolvedChannel;
@@ -377,7 +420,7 @@ export const sendHandlers: GatewayRequestHandlers = {
     const outboundChannel = channel;
     const plugin = resolveOutboundChannelPlugin({ channel, cfg });
     if (!plugin) {
-      respond(
+      instrumentedRespond(
         false,
         undefined,
         errorShape(ErrorCodes.INVALID_REQUEST, `unsupported channel: ${channel}`),
@@ -501,7 +544,7 @@ export const sendHandlers: GatewayRequestHandlers = {
     inflightMap.set(dedupeKey, work);
     try {
       const result = await work;
-      respond(result.ok, result.payload, result.error, result.meta);
+      instrumentedRespond(result.ok, result.payload, result.error, result.meta);
     } finally {
       inflightMap.delete(dedupeKey);
     }

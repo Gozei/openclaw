@@ -118,6 +118,8 @@ export const FIELD_LABELS: Record<string, string> = {
   "gateway.tls.certPath": "Gateway TLS Certificate Path",
   "gateway.tls.keyPath": "Gateway TLS Key Path",
   "gateway.tls.caPath": "Gateway TLS CA Path",
+  "gateway.attachments": "Gateway Attachments",
+  "gateway.attachments.maxBytes": "Gateway Attachment Max Bytes",
   "gateway.http": "Gateway HTTP API",
   "gateway.http.endpoints": "Gateway HTTP Endpoints",
   "gateway.http.securityHeaders": "Gateway HTTP Security Headers",

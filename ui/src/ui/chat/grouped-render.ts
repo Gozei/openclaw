@@ -68,6 +68,10 @@ type ImageBlock = {
   alt?: string;
 };
 
+function isRenderableImageMimeType(mimeType: unknown): boolean {
+  return typeof mimeType === "string" && mimeType.trim().toLowerCase().startsWith("image/");
+}
+
 function extractImages(message: unknown): ImageBlock[] {
   if (message && typeof message === "object") {
     const cached = extractedImagesCache.get(message);
@@ -92,10 +96,18 @@ function extractImages(message: unknown): ImageBlock[] {
         if (source?.type === "base64" && typeof source.data === "string") {
           const data = source.data;
           const mediaType = (source.media_type as string) || "image/png";
+          if (!isRenderableImageMimeType(mediaType)) {
+            continue;
+          }
           // If data is already a data URL, use it directly
           const url = data.startsWith("data:") ? data : `data:${mediaType};base64,${data}`;
           images.push({ url });
         } else if (typeof b.url === "string") {
+          const sourceMediaType =
+            source && typeof source.media_type === "string" ? source.media_type : undefined;
+          if (sourceMediaType && !isRenderableImageMimeType(sourceMediaType)) {
+            continue;
+          }
           images.push({ url: b.url });
         }
       } else if (b.type === "image_url") {
@@ -919,6 +931,69 @@ function renderAssistantAttachmentStatusCard(params: {
   `;
 }
 
+function resolveAssistantDocumentAttachmentMeta(params: { label: string; mimeType?: string }): {
+  glyph: string;
+  kindLabel: string;
+  detailLabel: string;
+} {
+  const rawMime = params.mimeType?.trim().toLowerCase() ?? "";
+  const rawLabel = params.label.trim().toLowerCase();
+  const isZip =
+    rawMime === "application/zip" ||
+    rawMime === "application/x-zip-compressed" ||
+    rawLabel.endsWith(".zip");
+  if (isZip) {
+    return {
+      glyph: "ZIP",
+      kindLabel: "zip archive",
+      detailLabel: "download or inspect extracted contents",
+    };
+  }
+  if (rawMime === "application/pdf" || rawLabel.endsWith(".pdf")) {
+    return {
+      glyph: "PDF",
+      kindLabel: "document",
+      detailLabel: "portable document format",
+    };
+  }
+  if (
+    rawMime === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+    rawLabel.endsWith(".xlsx") ||
+    rawLabel.endsWith(".csv")
+  ) {
+    return {
+      glyph: "XLS",
+      kindLabel: "spreadsheet",
+      detailLabel: "table or sheet attachment",
+    };
+  }
+  if (
+    rawMime === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+    rawLabel.endsWith(".docx")
+  ) {
+    return {
+      glyph: "DOC",
+      kindLabel: "document",
+      detailLabel: "word processing attachment",
+    };
+  }
+  if (
+    rawMime === "application/vnd.openxmlformats-officedocument.presentationml.presentation" ||
+    rawLabel.endsWith(".pptx")
+  ) {
+    return {
+      glyph: "PPT",
+      kindLabel: "slides",
+      detailLabel: "presentation attachment",
+    };
+  }
+  return {
+    glyph: "FILE",
+    kindLabel: "document",
+    detailLabel: rawMime || "downloadable attachment",
+  };
+}
+
 function renderAssistantAttachments(
   attachments: Array<Extract<MessageContentItem, { type: "attachment" }>>,
   localMediaPreviewRoots: readonly string[],
@@ -1015,16 +1090,26 @@ function renderAssistantAttachments(
             reason: availability.status === "unavailable" ? availability.reason : undefined,
           });
         }
+        const documentMeta = resolveAssistantDocumentAttachmentMeta({
+          label: attachment.label,
+          mimeType: attachment.mimeType,
+        });
         return html`
-          <div class="chat-assistant-attachment-card">
-            <span class="chat-assistant-attachment-card__icon">${icons.paperclip}</span>
-            <a
-              class="chat-assistant-attachment-card__link"
-              href=${attachmentUrl}
-              target="_blank"
-              rel="noreferrer"
-              >${attachment.label}</a
-            >
+          <div class="chat-assistant-attachment-card chat-assistant-attachment-card--document">
+            <span class="chat-assistant-attachment-card__file-glyph">${documentMeta.glyph}</span>
+            <div class="chat-assistant-attachment-card__body">
+              <span class="chat-assistant-attachment-card__meta">${documentMeta.kindLabel}</span>
+              <a
+                class="chat-assistant-attachment-card__link"
+                href=${attachmentUrl}
+                target="_blank"
+                rel="noreferrer"
+                >${attachment.label}</a
+              >
+              <span class="chat-assistant-attachment-card__reason"
+                >${documentMeta.detailLabel}</span
+              >
+            </div>
           </div>
         `;
       })}

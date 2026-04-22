@@ -1,4 +1,6 @@
+import { DEFAULT_GATEWAY_ATTACHMENT_MAX_BYTES } from "../../../../src/gateway/control-ui-contract.js";
 import { resetToolStream } from "../app-tool-stream.ts";
+import { resolveSupportedChatAttachmentKind } from "../chat/attachment-support.ts";
 import { extractText } from "../chat/message-extract.ts";
 import { formatConnectError } from "../connect-error.ts";
 import { GatewayRequestError, type GatewayBrowserClient } from "../gateway.ts";
@@ -114,6 +116,7 @@ export type ChatState = {
   chatStream: string | null;
   chatStreamStartedAt: number | null;
   lastError: string | null;
+  chatAttachmentMaxBytes?: number;
 };
 
 export type ChatEventPayload = {
@@ -232,6 +235,50 @@ function dataUrlToBase64(dataUrl: string): { content: string; mimeType: string }
   return { mimeType: match[1], content: match[2] };
 }
 
+function estimateBase64DecodedBytes(base64: string): number {
+  const padding = base64.endsWith("==") ? 2 : base64.endsWith("=") ? 1 : 0;
+  return Math.max(0, Math.floor((base64.length * 3) / 4) - padding);
+}
+
+function resolveChatAttachmentMaxBytes(state: ChatState): number {
+  return typeof state.chatAttachmentMaxBytes === "number" &&
+    Number.isFinite(state.chatAttachmentMaxBytes)
+    ? state.chatAttachmentMaxBytes
+    : DEFAULT_GATEWAY_ATTACHMENT_MAX_BYTES;
+}
+
+function formatBytesAsMb(bytes: number): string {
+  return `${(bytes / 1_000_000).toFixed(1)} MB`;
+}
+
+function findOversizedAttachment(
+  attachments: ChatAttachment[] | undefined,
+  maxBytes: number,
+): { fileName?: string; sizeBytes: number } | null {
+  if (!attachments?.length) {
+    return null;
+  }
+  for (const attachment of attachments) {
+    const parsed = dataUrlToBase64(attachment.dataUrl);
+    if (!parsed) {
+      continue;
+    }
+    const sizeBytes = estimateBase64DecodedBytes(parsed.content);
+    if (sizeBytes > maxBytes) {
+      return { fileName: attachment.fileName, sizeBytes };
+    }
+  }
+  return null;
+}
+
+function formatAttachmentSizeLimitError(
+  attachment: NonNullable<ReturnType<typeof findOversizedAttachment>>,
+  maxBytes: number,
+): string {
+  const label = attachment.fileName?.trim() || "attachment";
+  return `attachment ${label}: exceeds size limit (${formatBytesAsMb(attachment.sizeBytes)} > ${formatBytesAsMb(maxBytes)})`;
+}
+
 function buildApiAttachments(attachments?: ChatAttachment[]) {
   const hasAttachments = attachments && attachments.length > 0;
   return hasAttachments
@@ -241,9 +288,17 @@ function buildApiAttachments(attachments?: ChatAttachment[]) {
           if (!parsed) {
             return null;
           }
-          return {
-            type: "image",
+          const kind = resolveSupportedChatAttachmentKind({
             mimeType: parsed.mimeType,
+            fileName: att.fileName,
+          });
+          if (!kind) {
+            return null;
+          }
+          return {
+            type: kind,
+            mimeType: parsed.mimeType,
+            fileName: att.fileName,
             content: parsed.content,
           };
         })
@@ -326,8 +381,15 @@ export async function sendChatMessage(
   if (!msg && !hasAttachments) {
     return null;
   }
+  const maxAttachmentBytes = resolveChatAttachmentMaxBytes(state);
+  const oversizedAttachment = findOversizedAttachment(attachments, maxAttachmentBytes);
+  if (oversizedAttachment) {
+    state.lastError = formatAttachmentSizeLimitError(oversizedAttachment, maxAttachmentBytes);
+    return null;
+  }
 
   const now = Date.now();
+  const previousMessages = state.chatMessages;
 
   // Build user message content blocks
   const contentBlocks: Array<{ type: string; text?: string; source?: unknown }> = [];
@@ -369,14 +431,7 @@ export async function sendChatMessage(
     state.chatStream = null;
     state.chatStreamStartedAt = null;
     state.lastError = error;
-    state.chatMessages = [
-      ...state.chatMessages,
-      {
-        role: "assistant",
-        content: [{ type: "text", text: "Error: " + error }],
-        timestamp: Date.now(),
-      },
-    ];
+    state.chatMessages = previousMessages;
     return null;
   } finally {
     state.chatSending = false;
@@ -394,6 +449,12 @@ export async function sendDetachedChatMessage(
   const msg = message.trim();
   const hasAttachments = attachments && attachments.length > 0;
   if (!msg && !hasAttachments) {
+    return null;
+  }
+  const maxAttachmentBytes = resolveChatAttachmentMaxBytes(state);
+  const oversizedAttachment = findOversizedAttachment(attachments, maxAttachmentBytes);
+  if (oversizedAttachment) {
+    state.lastError = formatAttachmentSizeLimitError(oversizedAttachment, maxAttachmentBytes);
     return null;
   }
   state.lastError = null;

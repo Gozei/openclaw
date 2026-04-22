@@ -389,6 +389,11 @@ export type GatewayWebchatConfig = {
   chatHistoryMaxChars?: number;
 };
 
+export type GatewayAttachmentsConfig = {
+  /** Max decoded bytes per uploaded chat attachment before the Gateway rejects it. Default: 10MB. */
+  maxBytes?: number;
+};
+
 export type GatewayConfig = {
   /** Single multiplexed port for Gateway WS + HTTP (default: 18789). */
   port?: number;
@@ -431,6 +436,8 @@ export type GatewayConfig = {
   allowRealIpFallback?: boolean;
   /** Tool access restrictions for HTTP /tools/invoke endpoint. */
   tools?: GatewayToolsConfig;
+  /** Shared inbound attachment limits for chat/agent upload surfaces. */
+  attachments?: GatewayAttachmentsConfig;
   /** WebChat display/history settings. */
   webchat?: GatewayWebchatConfig;
   /**

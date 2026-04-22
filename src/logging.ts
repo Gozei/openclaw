@@ -23,6 +23,23 @@ import {
   setLoggerOverride,
   toPinoLikeLogger,
 } from "./logging/logger.js";
+import type {
+  PerfEvent,
+  PerfEventKind,
+  PerfOutcome,
+  PerfSpan,
+  PerfThresholds,
+} from "./logging/perf.js";
+import {
+  createPerfEvent,
+  finishPerfSpan,
+  getDefaultPerfThresholds,
+  isSlowPerfEvent,
+  logPerfEvent,
+  startPerfSpan,
+} from "./logging/perf.js";
+import type { RuntimeSamplerHandle, RuntimeSamplerOptions } from "./logging/runtime-sampler.js";
+import { startRuntimeSampler } from "./logging/runtime-sampler.js";
 import type { SubsystemLogger } from "./logging/subsystem.js";
 import {
   createSubsystemLogger,
@@ -30,6 +47,12 @@ import {
   runtimeForLogger,
   stripRedundantSubsystemPrefixForConsole,
 } from "./logging/subsystem.js";
+import type { TraceContext } from "./logging/trace-context.js";
+import {
+  createTraceContext,
+  deriveTraceContext,
+  withTraceDefaults,
+} from "./logging/trace-context.js";
 
 export {
   enableConsoleCapture,
@@ -56,12 +79,30 @@ export {
   createSubsystemRuntime,
   runtimeForLogger,
   stripRedundantSubsystemPrefixForConsole,
+  createPerfEvent,
+  finishPerfSpan,
+  getDefaultPerfThresholds,
+  isSlowPerfEvent,
+  logPerfEvent,
+  startPerfSpan,
+  startRuntimeSampler,
+  createTraceContext,
+  deriveTraceContext,
+  withTraceDefaults,
 };
 
 export type {
   ConsoleLoggerSettings,
   ConsoleStyle,
   LogLevel,
+  PerfEvent,
+  PerfEventKind,
+  PerfOutcome,
+  PerfSpan,
+  PerfThresholds,
+  RuntimeSamplerHandle,
+  RuntimeSamplerOptions,
+  TraceContext,
   LoggerResolvedSettings,
   LoggerSettings,
   PinoLikeLogger,

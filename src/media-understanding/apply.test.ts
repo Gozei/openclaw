@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
+import JSZip from "jszip";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MsgContext } from "../auto-reply/templating.js";
 import type { OpenClawConfig } from "../config/types.js";
@@ -1385,9 +1386,18 @@ describe("applyMediaUnderstanding", () => {
     expect(ctx.Body).toContain("中文内容");
   });
 
-  it("skips binary application/vnd office attachments even when bytes look printable", async () => {
-    // ZIP-based Office docs can have printable-leading bytes.
-    const pseudoZip = Buffer.from("PK\u0003\u0004[Content_Types].xml xl/workbook.xml", "utf8");
+  it("extracts Office attachment text instead of skipping application/vnd documents", async () => {
+    const zip = new JSZip();
+    zip.file("[Content_Types].xml", "<Types/>");
+    zip.file(
+      "xl/sharedStrings.xml",
+      "<sst><si><t>Name</t></si><si><t>Alice</t></si><si><t>Status</t></si><si><t>Ready</t></si></sst>",
+    );
+    zip.file(
+      "xl/worksheets/sheet1.xml",
+      '<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>2</v></c></row><row r="2"><c r="A2" t="s"><v>1</v></c><c r="B2" t="s"><v>3</v></c></row></sheetData></worksheet>',
+    );
+    const pseudoZip = await zip.generateAsync({ type: "nodebuffer" });
     const filePath = await createTempMediaFile({
       fileName: "report.xlsx",
       content: pseudoZip,
@@ -1399,7 +1409,38 @@ describe("applyMediaUnderstanding", () => {
       mediaType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     });
 
-    expectFileNotApplied({ ctx, result, body: "<media:file>" });
+    expect(result.appliedFile).toBe(true);
+    expect(ctx.Body).toContain("Sheet 1");
+    expect(ctx.Body).toContain("A=Name");
+    expect(ctx.Body).toContain("B=Ready");
+  });
+
+  it("extracts readable files from zip attachments", async () => {
+    const zip = new JSZip();
+    zip.file("docs/notes.txt", "hello from zip");
+    zip.file("tables/data.csv", "name,status\nAlice,Ready");
+    zip.file("nested/archive.zip", "PK\x03\x04nested");
+    const archive = await zip.generateAsync({ type: "nodebuffer" });
+    const filePath = await createTempMediaFile({
+      fileName: "bundle.zip",
+      content: archive,
+    });
+
+    const { ctx, result } = await applyWithDisabledMedia({
+      body: "<media:file>",
+      mediaPath: filePath,
+      mediaType: "application/zip",
+    });
+
+    expect(result.appliedFile).toBe(true);
+    expect(ctx.Body).toContain("Archive: bundle.zip");
+    expect(ctx.Body).toContain("Included: docs/notes.txt, tables/data.csv");
+    expect(ctx.Body).toContain("Skipped unsupported files: 1 (nested/archive.zip)");
+    expect(ctx.Body).toContain("File: docs/notes.txt");
+    expect(ctx.Body).toContain("hello from zip");
+    expect(ctx.Body).toContain("File: tables/data.csv");
+    expect(ctx.Body).toContain("Alice,Ready");
+    expect(ctx.Body).not.toContain("File: nested/archive.zip");
   });
 
   it("keeps vendor +json attachments eligible for text extraction", async () => {
