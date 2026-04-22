@@ -1,20 +1,20 @@
 {
-  "name": "openclaw",
+  "name": "@gozei/deepclaw",
   "version": "2026.4.15",
   "description": "Multi-channel AI gateway with extensible messaging integrations",
   "keywords": [],
-  "homepage": "https://github.com/openclaw/openclaw#readme",
+  "homepage": "https://github.com/Gozei/openclaw#readme",
   "bugs": {
-    "url": "https://github.com/openclaw/openclaw/issues"
+    "url": "https://github.com/Gozei/openclaw/issues"
   },
   "license": "MIT",
   "author": "",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/openclaw/openclaw.git"
+    "url": "git+https://github.com/Gozei/openclaw.git"
   },
   "bin": {
-    "openclaw": "openclaw.mjs"
+    "deepclaw": "openclaw.mjs"
   },
   "directories": {
     "doc": "docs",
