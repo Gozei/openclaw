@@ -19,6 +19,7 @@ import {
   normalizeReasoningLevel,
   normalizeThinkLevel,
   normalizeUsageDisplay,
+  resolveSupportedThinkingLevel,
   supportsXHighThinking,
 } from "../auto-reply/thinking.js";
 import type { SessionEntry } from "../config/sessions.js";
@@ -474,6 +475,15 @@ export async function applySessionsPatchToStore(params: {
       }
       next.thinkingLevel = "high";
     }
+  }
+  if (next.thinkingLevel === "max") {
+    const effectiveProvider = next.providerOverride ?? resolvedDefault.provider;
+    const effectiveModel = next.modelOverride ?? resolvedDefault.model;
+    next.thinkingLevel = resolveSupportedThinkingLevel({
+      provider: effectiveProvider,
+      model: effectiveModel,
+      level: next.thinkingLevel,
+    });
   }
 
   if ("sendPolicy" in patch) {

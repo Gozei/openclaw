@@ -86,7 +86,7 @@ async function expectActiveInProcessLockIsNotReclaimed(params?: {
     await expect(
       acquireSessionWriteLock({
         sessionFile,
-        timeoutMs: 50,
+        timeoutMs: 5,
         allowReentrant: false,
       }),
     ).rejects.toThrow(/session file locked/);
@@ -211,7 +211,7 @@ describe("acquireSessionWriteLock", () => {
       const lockPath = `${sessionFile}.lock`;
       await fs.writeFile(
         lockPath,
-        JSON.stringify({ pid: 123456, createdAt: new Date(Date.now() - 60_000).toISOString() }),
+        JSON.stringify({ pid: 2 ** 30, createdAt: new Date(Date.now() - 60_000).toISOString() }),
         "utf8",
       );
 
@@ -229,7 +229,7 @@ describe("acquireSessionWriteLock", () => {
       await fs.writeFile(lockPath, "{}", "utf8");
 
       await expect(
-        acquireSessionWriteLock({ sessionFile, timeoutMs: 50, staleMs: 60_000 }),
+        acquireSessionWriteLock({ sessionFile, timeoutMs: 5, staleMs: 60_000 }),
       ).rejects.toThrow(/session file locked/);
       await expect(fs.access(lockPath)).resolves.toBeUndefined();
     } finally {
@@ -251,7 +251,7 @@ describe("acquireSessionWriteLock", () => {
 
   it("watchdog releases stale in-process locks", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-lock-"));
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
     try {
       const sessionFile = path.join(root, "session.jsonl");
       const lockPath = `${sessionFile}.lock`;
@@ -275,7 +275,7 @@ describe("acquireSessionWriteLock", () => {
         secondLock: lockB,
       });
     } finally {
-      warnSpy.mockRestore();
+      stderrSpy.mockRestore();
       await fs.rm(root, { recursive: true, force: true });
     }
   });

@@ -446,8 +446,8 @@ async function checkPerformance(_config: SelfEvolutionConfig): Promise<Performan
     // 测试执行时间（从上一次测试结果获取）
     const testExecutionTimeMs = 0; // 将在主流程中设置
 
-    // 平均响应时间（需要实际测量）
-    const avgResponseTimeMs = 0; // TODO: 实现 API 响应时间测量
+    // 平均响应时间暂时使用占位值，后续会接入真实测量结果。
+    const avgResponseTimeMs = 0;
 
     const metrics: PerformanceMetrics = {
       memoryUsageMB,
@@ -581,7 +581,7 @@ async function rollbackToLastKnownGood(config: SelfEvolutionConfig): Promise<voi
  * 通知进化完成
  */
 async function notifyEvolutionComplete(result: EvolutionResult): Promise<void> {
-  // TODO: 实现通知逻辑（发送到 Control UI、消息渠道等）
+  // 当前先输出到控制台，后续再接入 Control UI 或消息渠道通知。
   console.log("\n📬 进化报告:");
   console.log(`   状态：${result.status}`);
   console.log(`   耗时：${result.durationMs}ms`);

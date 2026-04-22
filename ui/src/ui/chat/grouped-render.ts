@@ -68,8 +68,60 @@ type ImageBlock = {
   alt?: string;
 };
 
-function isRenderableImageMimeType(mimeType: unknown): boolean {
-  return typeof mimeType === "string" && mimeType.trim().toLowerCase().startsWith("image/");
+type ImageRenderOptions = {
+  localMediaPreviewRoots?: readonly string[];
+  basePath?: string;
+  authToken?: string | null;
+};
+
+type RenderableImageBlock = ImageBlock & {
+  displayUrl: string;
+};
+
+function appendImageBlock(images: ImageBlock[], block: ImageBlock) {
+  if (!images.some((entry) => entry.url === block.url && entry.alt === block.alt)) {
+    images.push(block);
+  }
+}
+
+function buildBase64ImageUrl(params: { data: string; mediaType?: string }): string {
+  return params.data.startsWith("data:")
+    ? params.data
+    : `data:${params.mediaType ?? "image/png"};base64,${params.data}`;
+}
+
+function getFileExtension(url: string): string | undefined {
+  const source = (() => {
+    try {
+      const trimmed = url.trim();
+      if (/^https?:\/\//i.test(trimmed)) {
+        return new URL(trimmed).pathname;
+      }
+    } catch {
+      // Fall back to the raw path when URL parsing fails.
+    }
+    return url;
+  })();
+  const fileName = source.split(/[\\/]/).pop() ?? source;
+  const match = /\.([a-zA-Z0-9]+)$/.exec(fileName);
+  return match?.[1]?.toLowerCase();
+}
+
+function isImageTranscriptMediaPath(path: string, mediaType: unknown): boolean {
+  if (typeof mediaType === "string" && mediaType.trim()) {
+    const normalized = mediaType.trim().toLowerCase();
+    if (normalized.startsWith("image/")) {
+      return true;
+    }
+    if (normalized !== "application/octet-stream") {
+      return false;
+    }
+  }
+  const ext = getFileExtension(path);
+  return (
+    ext !== undefined &&
+    ["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "heic", "heif", "avif"].includes(ext)
+  );
 }
 
 function extractImages(message: unknown): ImageBlock[] {
@@ -94,32 +146,62 @@ function extractImages(message: unknown): ImageBlock[] {
         // Handle source object format (from sendChatMessage)
         const source = b.source as Record<string, unknown> | undefined;
         if (source?.type === "base64" && typeof source.data === "string") {
-          const data = source.data;
-          const mediaType = (source.media_type as string) || "image/png";
-          if (!isRenderableImageMimeType(mediaType)) {
-            continue;
-          }
-          // If data is already a data URL, use it directly
-          const url = data.startsWith("data:") ? data : `data:${mediaType};base64,${data}`;
-          images.push({ url });
+          appendImageBlock(images, {
+            url: buildBase64ImageUrl({
+              data: source.data,
+              mediaType: typeof source.media_type === "string" ? source.media_type : undefined,
+            }),
+          });
         } else if (typeof b.url === "string") {
-          const sourceMediaType =
-            source && typeof source.media_type === "string" ? source.media_type : undefined;
-          if (sourceMediaType && !isRenderableImageMimeType(sourceMediaType)) {
-            continue;
-          }
-          images.push({ url: b.url });
+          appendImageBlock(images, { url: b.url });
         }
       } else if (b.type === "image_url") {
         // OpenAI format
         const imageUrl = b.image_url as Record<string, unknown> | undefined;
         if (typeof imageUrl?.url === "string") {
-          images.push({ url: imageUrl.url });
+          appendImageBlock(images, { url: imageUrl.url });
+        }
+      } else if (b.type === "input_image") {
+        const imageUrl = b.image_url;
+        if (typeof imageUrl === "string") {
+          appendImageBlock(images, { url: imageUrl });
+        } else if (imageUrl && typeof imageUrl === "object") {
+          const url = (imageUrl as Record<string, unknown>).url;
+          if (typeof url === "string") {
+            appendImageBlock(images, { url });
+          }
+        }
+        const source = b.source as Record<string, unknown> | undefined;
+        if (typeof source?.url === "string") {
+          appendImageBlock(images, { url: source.url });
+        } else if (typeof source?.data === "string") {
+          appendImageBlock(images, {
+            url: buildBase64ImageUrl({
+              data: source.data,
+              mediaType: typeof source.media_type === "string" ? source.media_type : undefined,
+            }),
+          });
         }
       }
     }
   }
 
+  const transcriptMediaPaths = Array.isArray(m.MediaPaths)
+    ? m.MediaPaths.filter((value): value is string => typeof value === "string")
+    : typeof m.MediaPath === "string"
+      ? [m.MediaPath]
+      : [];
+  const transcriptMediaTypes = Array.isArray(m.MediaTypes)
+    ? m.MediaTypes
+    : typeof m.MediaType === "string"
+      ? [m.MediaType]
+      : [];
+  for (const [index, mediaPath] of transcriptMediaPaths.entries()) {
+    if (!isImageTranscriptMediaPath(mediaPath, transcriptMediaTypes[index])) {
+      continue;
+    }
+    appendImageBlock(images, { url: mediaPath });
+  }
   if (message && typeof message === "object") {
     extractedImagesCache.set(message, images);
   }
@@ -680,7 +762,25 @@ function isAvatarUrl(value: string): boolean {
   );
 }
 
-function renderMessageImages(images: ImageBlock[]) {
+function resolveRenderableMessageImages(
+  images: ImageBlock[],
+  opts?: ImageRenderOptions,
+): RenderableImageBlock[] {
+  return images.flatMap((img) => {
+    const isLocalImage = isLocalAssistantAttachmentSource(img.url);
+    const canProxyLocalImage =
+      isLocalImage && isLocalAttachmentPreviewAllowed(img.url, opts?.localMediaPreviewRoots ?? []);
+    if (isLocalImage && !canProxyLocalImage) {
+      return [];
+    }
+    const displayUrl = canProxyLocalImage
+      ? buildAssistantAttachmentUrl(img.url, opts?.basePath, opts?.authToken)
+      : img.url;
+    return [{ ...img, displayUrl }];
+  });
+}
+
+function renderMessageImages(images: RenderableImageBlock[]) {
   if (images.length === 0) {
     return nothing;
   }
@@ -694,10 +794,10 @@ function renderMessageImages(images: ImageBlock[]) {
       ${images.map(
         (img) => html`
           <img
-            src=${img.url}
+            src=${img.displayUrl}
             alt=${img.alt ?? "Attached image"}
             class="chat-message-image"
-            @click=${() => openImage(img.url)}
+            @click=${() => openImage(img.displayUrl)}
           />
         `,
       )}
@@ -1252,13 +1352,19 @@ function renderGroupedMessage(
     normalizedRole,
     isToolResult,
     normalizedMessage,
-    images,
+    images: baseImages,
     extractedText,
     assistantAttachments,
     assistantViewBlocks,
   } = getGroupedMessageBaseState(message);
   const toolCards = (opts.showToolCalls ?? true) ? getCachedToolCards(message, messageKey) : [];
   const hasToolCards = toolCards.length > 0;
+  const imageRenderOptions = {
+    localMediaPreviewRoots: opts.localMediaPreviewRoots ?? [],
+    basePath: opts.basePath,
+    authToken: opts.assistantAttachmentAuthToken,
+  };
+  const images = resolveRenderableMessageImages(baseImages, imageRenderOptions);
   const hasImages = images.length > 0;
   const extractedThinking =
     opts.showReasoning && role === "assistant" ? extractThinkingCached(message) : null;

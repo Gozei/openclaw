@@ -839,16 +839,17 @@ function patchSessionThinkingLevel(
   if (!current) {
     return;
   }
+  const sessions = [...current.sessions];
+  const index = sessions.findIndex((row) => row.key === sessionKey);
+  if (index >= 0) {
+    sessions[index] = {
+      ...sessions[index],
+      thinkingLevel,
+    };
+  }
   state.sessionsResult = {
     ...current,
-    sessions: current.sessions.map((row) =>
-      row.key === sessionKey
-        ? {
-            ...row,
-            thinkingLevel,
-          }
-        : row,
-    ),
+    sessions,
   };
 }
 

@@ -645,7 +645,7 @@ describe("subscribeEmbeddedPiSession", () => {
       isError: false,
       result: { ok: true },
     });
-    emit({ type: "auto_compaction_end", willRetry: true, result: { summary: "compacted" } });
+    emit({ type: "compaction_end", willRetry: true, result: { summary: "compacted" } });
     emit({ type: "agent_end" });
 
     expect(subscription.getReplayState()).toEqual({
@@ -681,7 +681,7 @@ describe("subscribeEmbeddedPiSession", () => {
       isError: false,
       result: { details: { status: "ok" } },
     });
-    emit({ type: "auto_compaction_end", willRetry: true, result: { summary: "compacted" } });
+    emit({ type: "compaction_end", willRetry: true, result: { summary: "compacted" } });
     emit({ type: "agent_end" });
 
     const payloads = extractAgentEventPayloads(onAgentEvent.mock.calls);

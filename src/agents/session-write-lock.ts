@@ -223,7 +223,14 @@ function stopWatchdogTimer(): void {
   watchdogState.started = false;
 }
 
+function shouldStartBackgroundWatchdog(): boolean {
+  return process.env.VITEST !== "true" || process.env.OPENCLAW_TEST_SESSION_LOCK_WATCHDOG === "1";
+}
+
 function ensureWatchdogStarted(intervalMs: number): void {
+  if (!shouldStartBackgroundWatchdog()) {
+    return;
+  }
   const watchdogState = resolveWatchdogState();
   if (watchdogState.started) {
     return;
@@ -613,7 +620,11 @@ export async function acquireSessionWriteLock(params: {
         continue;
       }
 
-      const delay = Math.min(1000, 50 * attempt);
+      const remainingMs = timeoutMs - (Date.now() - startedAt);
+      if (remainingMs <= 0) {
+        break;
+      }
+      const delay = Math.min(1000, 50 * attempt, remainingMs);
       await new Promise((r) => setTimeout(r, delay));
     }
   }

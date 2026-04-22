@@ -28,7 +28,11 @@ import {
 import { HEARTBEAT_TOKEN } from "../auto-reply/tokens.js";
 import type { ReplyPayload } from "../auto-reply/types.js";
 import { getChannelPlugin } from "../channels/plugins/index.js";
-import type { ChannelHeartbeatDeps } from "../channels/plugins/types.public.js";
+import type {
+  ChannelHeartbeatDeps,
+  ChannelId,
+  ChannelPlugin,
+} from "../channels/plugins/types.public.js";
 import { loadConfig } from "../config/config.js";
 import {
   canonicalizeMainSessionAlias,
@@ -46,6 +50,7 @@ import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { resolveCronSession } from "../cron/isolated-agent/session.js";
 import { loadSessionEntry } from "../gateway/session-utils.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
+import { getActivePluginChannelRegistry } from "../plugins/runtime.js";
 import { getQueueSize } from "../process/command-queue.js";
 import { CommandLane } from "../process/lanes.js";
 import {
@@ -86,6 +91,7 @@ import {
   areHeartbeatsEnabled,
   type HeartbeatRunResult,
   type HeartbeatWakeHandler,
+  type HeartbeatWakeRequest,
   requestHeartbeatNow,
   setHeartbeatsEnabled,
   setHeartbeatWakeHandler,
@@ -118,6 +124,13 @@ let heartbeatRunnerRuntimePromise: Promise<typeof import("./heartbeat-runner.run
 function loadHeartbeatRunnerRuntime() {
   heartbeatRunnerRuntimePromise ??= import("./heartbeat-runner.runtime.js");
   return heartbeatRunnerRuntimePromise;
+}
+
+function resolveHeartbeatChannelPlugin(channel: string): ChannelPlugin | undefined {
+  const activePlugin = getActivePluginChannelRegistry()?.channels.find(
+    (entry) => entry.plugin.id === channel,
+  )?.plugin;
+  return activePlugin ?? getChannelPlugin(channel as ChannelId);
 }
 
 export { areHeartbeatsEnabled, setHeartbeatsEnabled };
@@ -994,7 +1007,7 @@ export async function runHeartbeatOnce(opts: {
     if (!canAttemptHeartbeatOk || delivery.channel === "none" || !delivery.to) {
       return false;
     }
-    const heartbeatPlugin = getChannelPlugin(delivery.channel);
+    const heartbeatPlugin = resolveHeartbeatChannelPlugin(delivery.channel);
     if (heartbeatPlugin?.heartbeat?.checkReady) {
       const readiness = await heartbeatPlugin.heartbeat.checkReady({
         cfg,
@@ -1183,7 +1196,7 @@ export async function runHeartbeatOnce(opts: {
     }
 
     const deliveryAccountId = delivery.accountId;
-    const heartbeatPlugin = getChannelPlugin(delivery.channel);
+    const heartbeatPlugin = resolveHeartbeatChannelPlugin(delivery.channel);
     if (heartbeatPlugin?.heartbeat?.checkReady) {
       const readiness = await heartbeatPlugin.heartbeat.checkReady({
         cfg,
@@ -1426,6 +1439,9 @@ export function startHeartbeatRunner(opts: {
     const reason = params?.reason;
     const requestedAgentId = params?.agentId ? normalizeAgentId(params.agentId) : undefined;
     const requestedSessionKey = normalizeOptionalString(params?.sessionKey);
+    const requestedHeartbeat = params?.heartbeat;
+    const resolveRequestedHeartbeat = (heartbeat?: HeartbeatConfig) =>
+      requestedHeartbeat ? { ...heartbeat, ...requestedHeartbeat } : heartbeat;
     const isInterval = reason === "interval";
     const startedAt = Date.now();
     const now = startedAt;
@@ -1459,7 +1475,7 @@ export function startHeartbeatRunner(opts: {
           const res = await runOnce({
             cfg: state.cfg,
             agentId: targetAgent.agentId,
-            heartbeat: targetAgent.heartbeat,
+            heartbeat: resolveRequestedHeartbeat(targetAgent.heartbeat),
             reason,
             sessionKey: requestedSessionKey,
             deps: { runtime: state.runtime },
@@ -1527,11 +1543,12 @@ export function startHeartbeatRunner(opts: {
     }
   };
 
-  const wakeHandler: HeartbeatWakeHandler = async (params) =>
+  const wakeHandler: HeartbeatWakeHandler = async (params: HeartbeatWakeRequest) =>
     run({
       reason: params.reason,
       agentId: params.agentId,
       sessionKey: params.sessionKey,
+      heartbeat: params.heartbeat,
     });
   const disposeWakeHandler = setHeartbeatWakeHandler(wakeHandler);
   updateConfig(state.cfg);
