@@ -446,7 +446,51 @@ const closeRunNodeOutputTee = async (deps, exitCode) => {
   return exitCode;
 };
 
-const removeStaleBuildLock = (deps, lockDir, staleMs) => {
+const readBuildLockOwnerPid = (deps, lockDir) => {
+  try {
+    const raw = deps.fs.readFileSync(path.join(lockDir, "owner.json"), "utf8");
+    const parsed = JSON.parse(raw);
+    const pid = parsed?.pid;
+    return Number.isInteger(pid) && pid > 0 ? pid : null;
+  } catch {
+    return null;
+  }
+};
+
+const isProcessAlive = (deps, pid) => {
+  if (!Number.isInteger(pid) || pid <= 0) {
+    return null;
+  }
+  if (pid === deps.process.pid) {
+    return true;
+  }
+  if (typeof deps.process?.kill !== "function") {
+    return null;
+  }
+  try {
+    deps.process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    if (error?.code === "ESRCH") {
+      return false;
+    }
+    if (error?.code === "EPERM") {
+      return true;
+    }
+    return null;
+  }
+};
+
+const removeAbandonedBuildLock = (deps, lockDir, staleMs) => {
+  const ownerPid = readBuildLockOwnerPid(deps, lockDir);
+  if (isProcessAlive(deps, ownerPid) === false) {
+    try {
+      deps.fs.rmSync(lockDir, { recursive: true, force: true });
+      return true;
+    } catch {
+      return false;
+    }
+  }
   try {
     const stats = deps.fs.statSync(lockDir);
     if (Date.now() - stats.mtimeMs < staleMs) {
@@ -508,7 +552,7 @@ const acquireRunNodeBuildLock = async (deps) => {
       if (error?.code !== "EEXIST") {
         throw error;
       }
-      if (removeStaleBuildLock(deps, lockDir, staleMs)) {
+      if (removeAbandonedBuildLock(deps, lockDir, staleMs)) {
         continue;
       }
       if (!loggedWait) {

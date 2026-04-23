@@ -802,6 +802,40 @@ describe("connectGateway", () => {
     expect(host.execApprovalQueue).toHaveLength(0);
   });
 
+  it("clears approval expiry timers when a request resolves early", () => {
+    vi.useFakeTimers();
+    try {
+      const host = createHost();
+
+      connectGateway(host);
+      const client = gatewayClientInstances[0];
+      expect(client).toBeDefined();
+
+      client.emitEvent({
+        event: "plugin.approval.requested",
+        payload: {
+          id: "plugin-approval-3",
+          createdAtMs: Date.now(),
+          expiresAtMs: Date.now() + 1_000,
+          request: { title: "Alert" },
+        },
+      });
+      expect(host.execApprovalQueue).toHaveLength(1);
+
+      client.emitEvent({
+        event: "plugin.approval.resolved",
+        payload: { id: "plugin-approval-3", decision: "allow-once" },
+      });
+      expect(host.execApprovalQueue).toHaveLength(0);
+
+      vi.advanceTimersByTime(2_000);
+      expect(host.execApprovalQueue).toHaveLength(0);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("reloads chat history once after the final chat event when tool output was used", () => {
     const { client } = connectHostGateway();
     emitToolResultEvent(client);

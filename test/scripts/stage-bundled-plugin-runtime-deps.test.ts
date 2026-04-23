@@ -282,6 +282,58 @@ describe("stageBundledPluginRuntimeDeps", () => {
     ).toBe("module.exports = 'second';\n");
   });
 
+  it("reuses dependency tree fingerprints across plugins that share one installed package", () => {
+    const repoRoot = createTempDir("openclaw-runtime-deps-shared-");
+    const createPlugin = (pluginId: string) => {
+      const pluginDir = path.join(repoRoot, "dist", "extensions", pluginId);
+      fs.mkdirSync(pluginDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(pluginDir, "package.json"),
+        `${JSON.stringify(
+          {
+            name: `@openclaw/${pluginId}`,
+            version: "1.0.0",
+            dependencies: { direct: "1.0.0" },
+            openclaw: { bundle: { stageRuntimeDependencies: true } },
+          },
+          null,
+          2,
+        )}\n`,
+        "utf8",
+      );
+      return pluginDir;
+    };
+    createPlugin("fixture-plugin-a");
+    createPlugin("fixture-plugin-b");
+
+    const directDir = path.join(repoRoot, "node_modules", "direct");
+    fs.mkdirSync(directDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(directDir, "package.json"),
+      '{ "name": "direct", "version": "1.0.0" }\n',
+      "utf8",
+    );
+    fs.writeFileSync(path.join(directDir, "index.js"), "module.exports = 'shared';\n", "utf8");
+    fs.writeFileSync(path.join(directDir, "unique.txt"), "shared-payload\n", "utf8");
+
+    const originalReadFileSync = fs.readFileSync;
+    let uniqueReads = 0;
+    fs.readFileSync = ((filePath: fs.PathOrFileDescriptor, options?: never) => {
+      if (String(filePath).endsWith(`${path.sep}unique.txt`)) {
+        uniqueReads += 1;
+      }
+      return originalReadFileSync(filePath, options);
+    }) as typeof fs.readFileSync;
+
+    try {
+      stageBundledPluginRuntimeDeps({ cwd: repoRoot });
+    } finally {
+      fs.readFileSync = originalReadFileSync;
+    }
+
+    expect(uniqueReads).toBe(1);
+  });
+
   it("refuses to replace a symlinked plugin node_modules directory", () => {
     const { pluginDir, repoRoot } = createBundledPluginFixture({
       packageJson: {

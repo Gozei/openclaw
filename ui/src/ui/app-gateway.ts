@@ -101,6 +101,10 @@ type GatewayHost = {
   updateAvailable: UpdateAvailable | null;
 };
 
+type GatewayHostWithExecApprovalTimers = GatewayHost & {
+  execApprovalExpiryTimers?: Map<string, number>;
+};
+
 type GatewayHostWithDeferredSessionMessageReload = GatewayHost & {
   pendingSessionMessageReloadSessionKey?: string | null;
 };
@@ -198,16 +202,46 @@ function enqueueApprovalRequest(host: GatewayHost, entry: ExecApprovalRequest | 
   }
   host.execApprovalQueue = addExecApproval(host.execApprovalQueue, entry);
   host.execApprovalError = null;
+  clearApprovalExpiryTimer(host, entry.id);
   const delay = Math.max(0, entry.expiresAtMs - Date.now() + 500);
-  window.setTimeout(() => {
+  const timeoutId = window.setTimeout(() => {
+    getExecApprovalExpiryTimers(host).delete(entry.id);
     host.execApprovalQueue = removeExecApproval(host.execApprovalQueue, entry.id);
   }, delay);
+  getExecApprovalExpiryTimers(host).set(entry.id, timeoutId);
 }
 
 function removeResolvedApprovalRequest(host: GatewayHost, payload: unknown) {
   const resolved = parseExecApprovalResolved(payload);
   if (resolved) {
+    clearApprovalExpiryTimer(host, resolved.id);
     host.execApprovalQueue = removeExecApproval(host.execApprovalQueue, resolved.id);
+  }
+}
+
+function getExecApprovalExpiryTimers(host: GatewayHost) {
+  const timerHost = host as GatewayHostWithExecApprovalTimers;
+  timerHost.execApprovalExpiryTimers ??= new Map();
+  return timerHost.execApprovalExpiryTimers;
+}
+
+function clearApprovalExpiryTimer(host: GatewayHost, id: string) {
+  const timeoutId = getExecApprovalExpiryTimers(host).get(id);
+  if (timeoutId == null) {
+    return;
+  }
+  window.clearTimeout(timeoutId);
+  getExecApprovalExpiryTimers(host).delete(id);
+}
+
+function syncApprovalExpiryTimers(host: GatewayHost) {
+  const activeIds = new Set(host.execApprovalQueue.map((entry) => entry.id));
+  for (const [id, timeoutId] of getExecApprovalExpiryTimers(host)) {
+    if (activeIds.has(id)) {
+      continue;
+    }
+    window.clearTimeout(timeoutId);
+    getExecApprovalExpiryTimers(host).delete(id);
   }
 }
 
@@ -594,6 +628,7 @@ export function connectGateway(host: GatewayHost, options?: ConnectGatewayOption
   host.connected = false;
   if (reconnectReason === "seq-gap") {
     host.execApprovalQueue = pruneExecApprovalQueue(host.execApprovalQueue);
+    syncApprovalExpiryTimers(host);
     clearPendingQueueItemsForRun(
       host as unknown as Parameters<typeof clearPendingQueueItemsForRun>[0],
       host.chatRunId ?? undefined,
@@ -601,6 +636,7 @@ export function connectGateway(host: GatewayHost, options?: ConnectGatewayOption
     shutdownHost.resumeChatQueueAfterReconnect = true;
   } else {
     host.execApprovalQueue = pruneExecApprovalQueue(host.execApprovalQueue);
+    syncApprovalExpiryTimers(host);
   }
   host.execApprovalError = null;
 

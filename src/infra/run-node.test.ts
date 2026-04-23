@@ -671,6 +671,60 @@ describe("run-node script", () => {
     });
   });
 
+  it("reclaims a fresh build lock immediately when the owner pid is no longer alive", async () => {
+    await withTempDir({ prefix: "openclaw-run-node-" }, async (tmp) => {
+      await setupTrackedProject(tmp, {
+        files: {
+          [ROOT_SRC]: "export const value = 1;\n",
+        },
+        oldPaths: [ROOT_SRC, ROOT_TSCONFIG, ROOT_PACKAGE],
+        buildPaths: [DIST_ENTRY, BUILD_STAMP],
+      });
+
+      const lockDir = path.join(tmp, ".artifacts", "run-node-build.lock");
+      await fs.mkdir(lockDir, { recursive: true });
+      await fs.writeFile(
+        path.join(lockDir, "owner.json"),
+        `${JSON.stringify({ pid: 999_999, startedAt: new Date().toISOString() })}\n`,
+        "utf8",
+      );
+
+      const fakeProcess = Object.assign(createFakeProcess(), {
+        kill: vi.fn((pid: number, signal: number) => {
+          if (pid === 999_999 && signal === 0) {
+            const error = new Error("missing");
+            Object.assign(error, { code: "ESRCH" });
+            throw error;
+          }
+        }),
+      });
+      const { spawn, spawnSync } = createSpawnRecorder({
+        gitHead: "abc123\n",
+        gitStatus: "",
+      });
+
+      const exitCode = await runNodeMain({
+        cwd: tmp,
+        args: ["status"],
+        env: {
+          ...process.env,
+          OPENCLAW_RUNNER_LOG: "0",
+          OPENCLAW_RUN_NODE_BUILD_LOCK_TIMEOUT_MS: "50",
+          OPENCLAW_RUN_NODE_BUILD_LOCK_POLL_MS: "1",
+          OPENCLAW_RUN_NODE_BUILD_LOCK_STALE_MS: "60000",
+        },
+        spawn,
+        spawnSync,
+        process: fakeProcess,
+        execPath: process.execPath,
+      });
+
+      expect(exitCode).toBe(0);
+      expect(fakeProcess.kill).toHaveBeenCalledWith(999_999, 0);
+      expect(fsSync.existsSync(lockDir)).toBe(false);
+    });
+  });
+
   it("returns the build exit code when the compiler step fails", async () => {
     await withTempDir({ prefix: "openclaw-run-node-" }, async (tmp) => {
       const spawn = (cmd: string, args: string[] = []) => {
