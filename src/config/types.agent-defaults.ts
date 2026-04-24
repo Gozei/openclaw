@@ -18,6 +18,20 @@ import type { MemorySearchConfig } from "./types.tools.js";
 export type AgentContextInjection = "always" | "continuation-skip";
 export type EmbeddedPiExecutionContract = "default" | "strict-agentic";
 
+export type AgentEvolutionConfig = {
+  enabled?: boolean;
+  reflectOnTaskComplete?: boolean;
+  reflectOnSubagentComplete?: boolean;
+  reflectOnHeartbeat?: boolean;
+  autoPromoteDailyMemory?: boolean;
+  autoPromoteMemory?: boolean;
+  autoPromoteUserProfile?: boolean;
+  autoPromoteRules?: boolean;
+  autoPromoteSkills?: boolean;
+  minRuleRepetition?: number;
+  minSkillRepetition?: number;
+};
+
 export type AgentModelEntryConfig = {
   alias?: string;
   /** Provider-specific API parameters (e.g., GLM-4.7 thinking mode). */
@@ -256,6 +270,8 @@ export type AgentDefaultsConfig = {
   contextTokens?: number;
   /** Optional CLI backends for text-only fallback (claude-cli, etc.). */
   cliBackends?: Record<string, CliBackendConfig>;
+  /** Optional evolution loop defaults for reflection, promotion, and metrics. */
+  evolution?: AgentEvolutionConfig;
   /** Opt-in: prune old tool results from the LLM context to reduce token usage. */
   contextPruning?: AgentContextPruningConfig;
   /** LLM timeout configuration. */

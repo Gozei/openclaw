@@ -5,6 +5,10 @@ import {
   stripLeadingSilentToken,
   stripSilentToken,
 } from "../auto-reply/tokens.js";
+import { maybeTriggerEvolutionForEvent } from "../evolution/auto.js";
+import { isOperationalFailureNoise } from "../evolution/noise.js";
+import { buildReflectionEvent } from "../evolution/reflect.js";
+import { buildWorkflowCandidateFromExecution } from "../evolution/workflow-compiler.js";
 import { defaultRuntime } from "../runtime.js";
 import { isCronSessionKey } from "../sessions/session-key-utils.js";
 import { normalizeOptionalString } from "../shared/string-coerce.js";
@@ -152,6 +156,30 @@ function stripAndClassifyReply(text: string): string | null {
     return null;
   }
   return result;
+}
+
+function normalizeFailureSignatureToken(value: string | undefined): string {
+  return (
+    (value ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "general"
+  );
+}
+
+function buildSubagentFailureSignatures(params: {
+  task: string;
+  taskLabel: string;
+  outcomeStatus: SubagentRunOutcome["status"];
+  succeeded: boolean;
+}): string[] {
+  if (params.succeeded) {
+    return [];
+  }
+  return [
+    `subagent:${params.outcomeStatus}:${normalizeFailureSignatureToken(params.taskLabel || params.task)}`,
+  ];
 }
 
 async function wakeSubagentRunAfterDescendants(params: {
@@ -455,6 +483,52 @@ export async function runSubagentAnnounceFlow(params: {
     const taskLabel = params.label || params.task || "task";
     const announceSessionId = childSessionId || "unknown";
     const findings = childCompletionFindings || reply || "(no output)";
+    const cfg = subagentAnnounceDeps.loadConfig();
+    const succeeded = outcome.status === "ok";
+    const isOperationalNoise = isOperationalFailureNoise(findings);
+    const failureSignatures = buildSubagentFailureSignatures({
+      task: params.task,
+      taskLabel,
+      outcomeStatus: outcome.status,
+      succeeded: succeeded || isOperationalNoise,
+    });
+    const candidateWorkflow = succeeded
+      ? buildWorkflowCandidateFromExecution({
+          task: params.task,
+          taskLabel,
+          summary: findings,
+          error:
+            childCompletionFindings && childCompletionFindings !== findings
+              ? childCompletionFindings
+              : undefined,
+          runtime: "subagent_announce",
+        })
+      : undefined;
+    const evolutionEvent = buildReflectionEvent({
+      source: "subagent",
+      nowMs: params.endedAt ?? Date.now(),
+      sessionKey: targetRequesterSessionKey,
+      taskId: params.childRunId,
+      subagentId: params.childSessionKey,
+      promptSummary: params.task,
+      outcomeSummary: findings,
+      succeeded,
+      whatWorked: succeeded ? [findings] : [],
+      whatFailed: succeeded || isOperationalNoise ? [] : [findings],
+      durableFacts: succeeded && findings !== "(no output)" ? [findings] : [],
+      candidateRules:
+        failureSignatures.length > 0
+          ? [
+              `When subagent task "${taskLabel}" ends as ${outcome.status}, inspect the announced findings before retrying. Latest signal: ${findings}`,
+            ]
+          : [],
+      failureSignatures,
+      candidateWorkflow,
+      confidence: succeeded ? 0.82 : 0.74,
+      provenance: {
+        messageCount: findings === "(no output)" ? 0 : 1,
+      },
+    });
 
     let requesterIsSubagent = requesterIsInternalSession();
     if (requesterIsSubagent) {
@@ -556,6 +630,11 @@ export async function runSubagentAnnounceFlow(params: {
       signal: params.signal,
     });
     didAnnounce = delivery.delivered;
+    maybeTriggerEvolutionForEvent({
+      cfg,
+      sessionKey: targetRequesterSessionKey,
+      event: evolutionEvent,
+    });
     if (!delivery.delivered && delivery.path === "direct" && delivery.error) {
       defaultRuntime.error?.(
         `Subagent completion direct announce failed for run ${params.childRunId}: ${delivery.error}`,

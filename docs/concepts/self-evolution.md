@@ -241,6 +241,6 @@ du -sh ~/.openclaw/*
 
 ## 参见
 
-- [定时任务](/concepts/cron)
-- [代码质量](/concepts/code-quality)
-- [性能优化](/concepts/performance)
+- [定时任务](/automation/cron-jobs)
+- [测试与质量保障](/help/testing)
+- [提示缓存与性能](/reference/prompt-caching)

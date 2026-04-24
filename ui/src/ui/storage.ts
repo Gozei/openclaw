@@ -3,6 +3,12 @@ const LEGACY_SETTINGS_KEY = "openclaw.control.settings.v1";
 const LEGACY_TOKEN_SESSION_KEY = "openclaw.control.token.v1";
 const TOKEN_SESSION_KEY_PREFIX = "openclaw.control.token.v1:";
 const MAX_SCOPED_SESSION_ENTRIES = 10;
+const DEFAULT_NAV_GROUPS_COLLAPSED = {
+  chat: false,
+  control: false,
+  agent: true,
+  settings: true,
+} as const;
 
 function settingsKeyForGateway(gatewayUrl: string): string {
   return `${SETTINGS_KEY_PREFIX}${normalizeGatewayTokenScope(gatewayUrl)}`;
@@ -193,7 +199,7 @@ export function loadSettings(): UiSettings {
     splitRatio: 0.6,
     navCollapsed: false,
     navWidth: 220,
-    navGroupsCollapsed: {},
+    navGroupsCollapsed: { ...DEFAULT_NAV_GROUPS_COLLAPSED },
     borderRadius: 50,
   };
 
@@ -247,7 +253,7 @@ export function loadSettings(): UiSettings {
           : defaults.navWidth,
       navGroupsCollapsed:
         typeof parsed.navGroupsCollapsed === "object" && parsed.navGroupsCollapsed !== null
-          ? parsed.navGroupsCollapsed
+          ? { ...DEFAULT_NAV_GROUPS_COLLAPSED, ...parsed.navGroupsCollapsed }
           : defaults.navGroupsCollapsed,
       borderRadius:
         typeof parsed.borderRadius === "number" &&

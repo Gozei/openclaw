@@ -84,6 +84,11 @@ Dreaming-generated diary/report artifacts are excluded from short-term
 promotion. Only grounded memory snippets are eligible to promote into
 `MEMORY.md`.
 
+When evolution artifacts exist in `memory/.evolution/`, Dream Diary prompts can
+also weave in the latest evolution report bullets and recent rule/skill proposal
+titles so the narrative reflects both memory consolidation and self-improvement
+signals in one place.
+
 There is also a grounded historical backfill lane for review and recovery work:
 
 - `memory rem-harness --path ... --grounded` previews grounded diary output from historical `YYYY-MM-DD.md` notes.
@@ -165,6 +170,25 @@ Enable dreaming with a custom sweep cadence:
 }
 ```
 
+Force Dream Diary output to Simplified Chinese:
+
+```json
+{
+  "plugins": {
+    "entries": {
+      "memory-core": {
+        "config": {
+          "dreaming": {
+            "enabled": true,
+            "narrativeLanguage": "zh-CN"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
 ## Slash command
 
 ```
@@ -207,10 +231,11 @@ openclaw memory rem-harness --json
 
 All settings live under `plugins.entries.memory-core.config.dreaming`.
 
-| Key         | Default     |
-| ----------- | ----------- |
-| `enabled`   | `false`     |
-| `frequency` | `0 3 * * *` |
+| Key                 | Default     |
+| ------------------- | ----------- |
+| `enabled`           | `false`     |
+| `frequency`         | `0 3 * * *` |
+| `narrativeLanguage` | auto-detect |
 
 Phase policy, thresholds, and storage behavior are internal implementation
 details (not user-facing config).

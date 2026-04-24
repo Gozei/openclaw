@@ -14,6 +14,7 @@ import {
   updateSessionStoreEntry,
 } from "../../config/sessions.js";
 import type { TypingMode } from "../../config/types.js";
+import { maybeTriggerEvolutionForReplyRun } from "../../evolution/auto.js";
 import { resolveSessionTranscriptCandidates } from "../../gateway/session-utils.fs.js";
 import { emitAgentEvent } from "../../infra/agent-events.js";
 import { emitDiagnosticEvent, isDiagnosticsEnabled } from "../../infra/diagnostic-events.js";
@@ -1719,6 +1720,16 @@ export async function runReplyAgent(params: {
     if (responseUsageLine) {
       finalPayloads = appendUsageLine(finalPayloads, responseUsageLine);
     }
+
+    maybeTriggerEvolutionForReplyRun({
+      cfg,
+      agentId: followupRun.run.agentId,
+      sessionKey: replySessionKey,
+      workspaceDir: followupRun.run.workspaceDir,
+      promptSummary: commandBody,
+      reply: finalPayloads.length === 1 ? finalPayloads[0] : finalPayloads,
+      isHeartbeat,
+    });
 
     return finalizeWithFollowup(
       finalPayloads.length === 1 ? finalPayloads[0] : finalPayloads,

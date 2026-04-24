@@ -33,6 +33,7 @@ import {
   loadWikiMemoryPalace,
   type DreamingState,
 } from "./controllers/dreaming.ts";
+import { loadEvolutionStatus, type EvolutionState } from "./controllers/evolution.ts";
 import { loadExecApprovals, type ExecApprovalsState } from "./controllers/exec-approvals.ts";
 import { loadLogs, type LogsState } from "./controllers/logs.ts";
 import {
@@ -104,6 +105,7 @@ type SettingsAppHost = SettingsHost &
   DebugState &
   DevicesState &
   DreamingState &
+  EvolutionState &
   ExecApprovalsState &
   LogsState &
   NodesState &
@@ -349,6 +351,9 @@ export async function refreshActiveTab(host: SettingsHost) {
         loadWikiImportInsights(app),
         loadWikiMemoryPalace(app),
       ]);
+      return;
+    case "evolution":
+      await loadEvolutionStatus(app);
       return;
     case "chat":
       await refreshChat(host as unknown as Parameters<typeof refreshChat>[0]);

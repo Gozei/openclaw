@@ -21,6 +21,8 @@ import {
   updateSessionStoreEntry,
 } from "../../config/sessions.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
+import { maybeTriggerEvolutionForEvent } from "../../evolution/auto.js";
+import { buildReflectionEvent } from "../../evolution/reflect.js";
 import { readSessionMessages } from "../../gateway/session-utils.fs.js";
 import { logVerbose } from "../../globals.js";
 import { registerAgentRunContext } from "../../infra/agent-events.js";
@@ -848,6 +850,32 @@ export async function runMemoryFlushIfNeeded(params: {
       } catch (err) {
         logVerbose(`failed to persist memory flush metadata: ${String(err)}`);
       }
+    }
+    if (params.sessionKey) {
+      const outcomeSummary = memoryCompactionCompleted
+        ? `Pre-compaction memory flush completed and rotated the session after writing ${memoryFlushWritePath}.`
+        : `Pre-compaction memory flush completed and wrote session learnings to ${memoryFlushWritePath}.`;
+      const event = buildReflectionEvent({
+        source: "compaction",
+        nowMs: memoryFlushNowMs,
+        sessionKey: params.sessionKey,
+        promptSummary: activeMemoryFlushPlan.prompt,
+        outcomeSummary,
+        succeeded: true,
+        whatWorked: [outcomeSummary],
+        durableFacts: memoryCompactionCompleted
+          ? [`Memory flush rotated the session after writing ${memoryFlushWritePath}.`]
+          : [],
+        confidence: memoryCompactionCompleted ? 0.84 : 0.76,
+        provenance: {
+          artifactPaths: [memoryFlushWritePath],
+        },
+      });
+      maybeTriggerEvolutionForEvent({
+        cfg: params.cfg,
+        sessionKey: params.sessionKey,
+        event,
+      });
     }
   } catch (err) {
     logVerbose(`memory flush run failed: ${String(err)}`);

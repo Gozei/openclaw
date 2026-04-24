@@ -9,6 +9,7 @@ import {
 } from "@mariozechner/pi-coding-agent";
 import { filterHeartbeatPairs } from "../../../auto-reply/heartbeat-filter.js";
 import { resolveChannelCapabilities } from "../../../config/channel-capabilities.js";
+import { buildEvolutionPreflight } from "../../../evolution/preflight.js";
 import { formatErrorMessage } from "../../../infra/errors.js";
 import { resolveHeartbeatSummaryForAgent } from "../../../infra/heartbeat-summary.js";
 import { getMachineDisplayName } from "../../../infra/machine-name.js";
@@ -879,6 +880,21 @@ export async function runEmbeddedAttempt(
       },
     });
 
+    const evolutionPreflight =
+      effectivePromptMode === "full"
+        ? await buildEvolutionPreflight({
+            workspaceDir: effectiveWorkspace,
+            userPrompt: params.prompt,
+          })
+        : undefined;
+    const evolutionPreflightPrompt = evolutionPreflight?.prompt;
+    const combinedExtraSystemPrompt = [
+      params.extraSystemPrompt?.trim() ?? "",
+      evolutionPreflightPrompt,
+    ]
+      .filter((value) => value && value.trim())
+      .join("\n\n")
+      .trim();
     const builtAppendPrompt =
       resolveSystemPromptOverride({
         config: params.config,
@@ -888,7 +904,7 @@ export async function runEmbeddedAttempt(
         workspaceDir: effectiveWorkspace,
         defaultThinkLevel: params.thinkLevel,
         reasoningLevel: params.reasoningLevel ?? "off",
-        extraSystemPrompt: params.extraSystemPrompt,
+        extraSystemPrompt: combinedExtraSystemPrompt,
         ownerNumbers: params.ownerNumbers,
         ownerDisplay: ownerDisplay.ownerDisplay,
         ownerDisplaySecret: ownerDisplay.ownerDisplaySecret,
@@ -2664,6 +2680,7 @@ export async function runEmbeddedAttempt(
         bootstrapPromptWarningSignaturesSeen: bootstrapPromptWarning.warningSignaturesSeen,
         bootstrapPromptWarningSignature: bootstrapPromptWarning.signature,
         systemPromptReport,
+        evolutionRecall: evolutionPreflight?.recall,
         finalPromptText,
         messagesSnapshot,
         assistantTexts,

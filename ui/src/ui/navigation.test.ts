@@ -59,6 +59,7 @@ describe("titleForTab", () => {
     expect(titleForTab("chat")).toBe("Chat");
     expect(titleForTab("overview")).toBe("Overview");
     expect(titleForTab("cron")).toBe("Cron Jobs");
+    expect(titleForTab("evolution")).toBe("进化");
   });
 });
 
@@ -132,6 +133,7 @@ describe("tabFromPath", () => {
     expect(tabFromPath("/sessions")).toBe("sessions");
     expect(tabFromPath("/dreaming")).toBe("dreams");
     expect(tabFromPath("/dreams")).toBe("dreams");
+    expect(tabFromPath("/evolution")).toBe("evolution");
   });
 
   it("returns chat for root path", () => {
@@ -163,6 +165,7 @@ describe("inferBasePathFromPathname", () => {
     expect(inferBasePathFromPathname("/overview")).toBe("");
     expect(inferBasePathFromPathname("/dreaming")).toBe("");
     expect(inferBasePathFromPathname("/dreams")).toBe("");
+    expect(inferBasePathFromPathname("/evolution")).toBe("");
   });
 
   it("infers base path from nested paths", () => {

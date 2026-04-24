@@ -165,6 +165,7 @@ export const zh_CN: TranslationMap = {
     debug: "调试",
     logs: "日志",
     dreams: "梦境",
+    evolution: "进化",
   },
   subtitles: {
     agents: "工作区、工具、身份。",
@@ -186,6 +187,7 @@ export const zh_CN: TranslationMap = {
     debug: "快照、事件、RPC。",
     logs: "实时网关日志。",
     dreams: "睡眠时进行记忆巩固。",
+    evolution: "自我改进指标、经验沉淀与提案。",
   },
   overview: {
     access: {
@@ -408,6 +410,36 @@ export const zh_CN: TranslationMap = {
       simmeringIdeas: "正在酝酿尚未成形的想法…",
       whisperingVectorStore: "正在向向量存储轻声低语…",
     },
+  },
+  evolutionView: {
+    title: "进化",
+    subtitle: "汇总、沉淀和提案，展示代理在完成工作后如何真正变好。",
+    workspace: "工作区：{path}",
+    enabledHint: "进化已启用。发送一轮聊天或完成一个任务后，刷新此标签页即可看到计数和提案变化。",
+    disabledHint:
+      "配置里已禁用进化。现有产物仍然可见，但新的对话和任务不会再继续沉淀经验，直到重新启用为止。",
+    emptyHint: "还没有进化数据。先运行一个任务或发送一轮聊天，再回来刷新。",
+    noDataYet: "暂无数据。",
+    summaryRepeatFailuresTitle: "重复失败",
+    summaryRepeatFailuresEmpty: "还没有记录到重复失败。",
+    summaryReusableWorkflowsTitle: "可复用工作流",
+    summaryReusableWorkflowsEmpty: "还没有记录到工作流复用。",
+    latestDailyMemory: "最新每日记忆",
+    latestReport: "最新进化报告",
+    ruleProposals: "规则提案",
+    skillProposals: "技能提案",
+    noProposalsYet: "暂无提案。",
+    cycles: "循环次数",
+    successes: "成功次数",
+    failures: "失败次数",
+    repeatedFailures: "重复失败",
+    appliedRules: "已应用规则",
+    appliedSkills: "已应用技能",
+    candidates: "候选数：{count}",
+    count: "次数：{count}",
+    lastSeen: "最近出现：{time}",
+    workaround: "绕过方式：{text}",
+    created: "创建时间：{time}",
   },
   usage: {
     page: {

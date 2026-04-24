@@ -3,6 +3,10 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionEntry } from "../../config/sessions.js";
+const maybeTriggerEvolutionForEventMock = vi.fn();
+vi.mock("../../evolution/auto.js", () => ({
+  maybeTriggerEvolutionForEvent: (...args: unknown[]) => maybeTriggerEvolutionForEventMock(...args),
+}));
 import {
   clearMemoryPluginState,
   registerMemoryFlushPlanResolver,
@@ -66,6 +70,7 @@ describe("runMemoryFlushIfNeeded", () => {
       }
       return nextEntry.compactionCount;
     });
+    maybeTriggerEvolutionForEventMock.mockReset();
     setAgentRunnerMemoryTestDeps({
       runWithModelFallback: runWithModelFallbackMock as never,
       runEmbeddedPiAgent: runEmbeddedPiAgentMock as never,
@@ -156,6 +161,15 @@ describe("runMemoryFlushIfNeeded", () => {
     expect(persisted.main.compactionCount).toBe(2);
     expect(persisted.main.memoryFlushCompactionCount).toBe(2);
     expect(persisted.main.memoryFlushAt).toBe(1_700_000_000_000);
+    expect(maybeTriggerEvolutionForEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionKey: "main",
+        event: expect.objectContaining({
+          source: "compaction",
+          succeeded: true,
+        }),
+      }),
+    );
   });
 
   it("skips memory flush for CLI providers", async () => {

@@ -1,5 +1,6 @@
 import { DEFAULT_PROVIDER } from "../../agents/defaults.js";
-import { buildAllowedModelSet } from "../../agents/model-selection.js";
+import type { ModelCatalogEntry } from "../../agents/model-catalog.js";
+import { buildAllowedModelSet, buildConfiguredModelCatalog } from "../../agents/model-selection.js";
 import { loadConfig } from "../../config/config.js";
 import {
   ErrorCodes,
@@ -8,6 +9,34 @@ import {
   validateModelsListParams,
 } from "../protocol/index.js";
 import type { GatewayRequestHandlers } from "./types.js";
+
+function modelCatalogKey(entry: Pick<ModelCatalogEntry, "provider" | "id">): string {
+  return `${entry.provider.trim().toLowerCase()}::${entry.id.trim().toLowerCase()}`;
+}
+
+function buildPickerCatalog(params: {
+  catalog: ModelCatalogEntry[];
+  allowlistedCatalog: ModelCatalogEntry[];
+  configuredCatalog: ModelCatalogEntry[];
+}): ModelCatalogEntry[] {
+  const configuredOrAllowed =
+    params.allowlistedCatalog.length > 0 ? params.allowlistedCatalog : params.configuredCatalog;
+  if (configuredOrAllowed.length === 0) {
+    return params.catalog;
+  }
+  const runtimeByKey = new Map(params.catalog.map((entry) => [modelCatalogKey(entry), entry]));
+  const seen = new Set<string>();
+  return configuredOrAllowed
+    .filter((entry) => {
+      const key = modelCatalogKey(entry);
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    })
+    .map((entry) => runtimeByKey.get(modelCatalogKey(entry)) ?? entry);
+}
 
 export const modelsHandlers: GatewayRequestHandlers = {
   "models.list": async ({ params, respond, context }) => {
@@ -25,12 +54,23 @@ export const modelsHandlers: GatewayRequestHandlers = {
     try {
       const catalog = await context.loadGatewayModelCatalog();
       const cfg = loadConfig();
-      const { allowedCatalog } = buildAllowedModelSet({
+      const { allowAny, allowedCatalog } = buildAllowedModelSet({
         cfg,
         catalog,
         defaultProvider: DEFAULT_PROVIDER,
       });
-      const models = allowedCatalog.length > 0 ? allowedCatalog : catalog;
+      const configuredOnly = params?.configuredOnly === true;
+      const configuredCatalog = configuredOnly ? buildConfiguredModelCatalog({ cfg }) : [];
+      const allowlistedCatalog = allowAny ? [] : allowedCatalog;
+      const models = configuredOnly
+        ? buildPickerCatalog({
+            catalog,
+            allowlistedCatalog,
+            configuredCatalog,
+          })
+        : allowedCatalog.length > 0
+          ? allowedCatalog
+          : catalog;
       respond(true, { models }, undefined);
     } catch (err) {
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(err)));

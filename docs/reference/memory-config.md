@@ -491,10 +491,11 @@ For conceptual behavior and slash commands, see [Dreaming](/concepts/dreaming).
 
 ### User settings
 
-| Key         | Type      | Default     | Description                                       |
-| ----------- | --------- | ----------- | ------------------------------------------------- |
-| `enabled`   | `boolean` | `false`     | Enable or disable dreaming entirely               |
-| `frequency` | `string`  | `0 3 * * *` | Optional cron cadence for the full dreaming sweep |
+| Key                 | Type      | Default     | Description                                            |
+| ------------------- | --------- | ----------- | ------------------------------------------------------ |
+| `enabled`           | `boolean` | `false`     | Enable or disable dreaming entirely                    |
+| `frequency`         | `string`  | `0 3 * * *` | Optional cron cadence for the full dreaming sweep      |
+| `narrativeLanguage` | `string`  | auto-detect | Optional Dream Diary output language (`en` or `zh-CN`) |
 
 ### Example
 
@@ -507,6 +508,7 @@ For conceptual behavior and slash commands, see [Dreaming](/concepts/dreaming).
           dreaming: {
             enabled: true,
             frequency: "0 3 * * *",
+            narrativeLanguage: "zh-CN",
           },
         },
       },
@@ -519,4 +521,5 @@ Notes:
 
 - Dreaming writes machine state to `memory/.dreams/`.
 - Dreaming writes human-readable narrative output to `DREAMS.md` (or existing `dreams.md`).
+- When `narrativeLanguage` is omitted, Dream Diary output auto-detects English vs. Simplified Chinese from the available source material.
 - The light/deep/REM phase policy and thresholds are internal behavior, not user-facing config.

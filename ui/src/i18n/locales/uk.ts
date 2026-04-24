@@ -167,6 +167,7 @@ export const uk: TranslationMap = {
     debug: "Налагодження",
     logs: "Журнали",
     dreams: "Сни",
+    evolution: "进化",
   },
   subtitles: {
     agents: "Робочі простори, інструменти, ідентичності.",
@@ -188,6 +189,7 @@ export const uk: TranslationMap = {
     debug: "Знімки, події, RPC.",
     logs: "Журнали шлюзу в реальному часі.",
     dreams: "Консолідація пам’яті під час сну.",
+    evolution: "Self-improvement metrics, lessons, and promotions for 进化.",
   },
   overview: {
     access: {
@@ -421,6 +423,37 @@ export const uk: TranslationMap = {
       simmeringIdeas: "томління напівсформованих ідей…",
       whisperingVectorStore: "шепіт до vector store…",
     },
+  },
+  evolutionView: {
+    title: "进化",
+    subtitle: "Summaries, promotions, and proof that the agent improved after work.",
+    workspace: "Workspace: {path}",
+    enabledHint:
+      "进化 is enabled. Send a chat turn, then refresh this tab to watch the counters and promotions move.",
+    disabledHint:
+      "进化 is disabled in config. Existing artifacts may still be visible, but new turns will not promote lessons until it is re-enabled.",
+    emptyHint: "No 进化 data yet. Run a task or send a chat turn, then refresh.",
+    noDataYet: "No data yet.",
+    summaryRepeatFailuresTitle: "Repeat Failures",
+    summaryRepeatFailuresEmpty: "No repeat failures recorded yet.",
+    summaryReusableWorkflowsTitle: "Reusable Workflows",
+    summaryReusableWorkflowsEmpty: "No workflow reuse recorded yet.",
+    latestDailyMemory: "Latest Daily Memory",
+    latestReport: "Latest 进化 Report",
+    ruleProposals: "Rule Proposals",
+    skillProposals: "Skill Proposals",
+    noProposalsYet: "No proposals yet.",
+    cycles: "Cycles",
+    successes: "Successes",
+    failures: "Failures",
+    repeatedFailures: "Repeated failures",
+    appliedRules: "Applied rules",
+    appliedSkills: "Applied skills",
+    candidates: "Candidates: {count}",
+    count: "Count: {count}",
+    lastSeen: "Last seen: {time}",
+    workaround: "Workaround: {text}",
+    created: "Created: {time}",
   },
   usage: {
     page: {

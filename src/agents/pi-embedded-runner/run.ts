@@ -2160,6 +2160,7 @@ export async function runEmbeddedPiAgent(
               },
               contextManagement:
                 autoCompactionCount > 0 ? { lastTurnCompactions: autoCompactionCount } : undefined,
+              evolutionRecall: attempt.evolutionRecall,
             },
             didSendViaMessagingTool: attempt.didSendViaMessagingTool,
             didSendDeterministicApprovalPrompt: attempt.didSendDeterministicApprovalPrompt,

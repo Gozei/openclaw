@@ -3825,6 +3825,49 @@ export const GENERATED_BASE_CONFIG_SCHEMA: BaseConfigSchemaResponse = {
                 title: "CLI Backends",
                 description: "Optional CLI backends for text-only fallback (claude-cli, etc.).",
               },
+              evolution: {
+                type: "object",
+                properties: {
+                  enabled: {
+                    type: "boolean",
+                  },
+                  reflectOnTaskComplete: {
+                    type: "boolean",
+                  },
+                  reflectOnSubagentComplete: {
+                    type: "boolean",
+                  },
+                  reflectOnHeartbeat: {
+                    type: "boolean",
+                  },
+                  autoPromoteDailyMemory: {
+                    type: "boolean",
+                  },
+                  autoPromoteMemory: {
+                    type: "boolean",
+                  },
+                  autoPromoteUserProfile: {
+                    type: "boolean",
+                  },
+                  autoPromoteRules: {
+                    type: "boolean",
+                  },
+                  autoPromoteSkills: {
+                    type: "boolean",
+                  },
+                  minRuleRepetition: {
+                    type: "integer",
+                    minimum: 1,
+                    maximum: 20,
+                  },
+                  minSkillRepetition: {
+                    type: "integer",
+                    minimum: 1,
+                    maximum: 20,
+                  },
+                },
+                additionalProperties: false,
+              },
               memorySearch: {
                 type: "object",
                 properties: {
@@ -6369,6 +6412,49 @@ export const GENERATED_BASE_CONFIG_SCHEMA: BaseConfigSchemaResponse = {
                     },
                     isolatedSession: {
                       type: "boolean",
+                    },
+                  },
+                  additionalProperties: false,
+                },
+                evolution: {
+                  type: "object",
+                  properties: {
+                    enabled: {
+                      type: "boolean",
+                    },
+                    reflectOnTaskComplete: {
+                      type: "boolean",
+                    },
+                    reflectOnSubagentComplete: {
+                      type: "boolean",
+                    },
+                    reflectOnHeartbeat: {
+                      type: "boolean",
+                    },
+                    autoPromoteDailyMemory: {
+                      type: "boolean",
+                    },
+                    autoPromoteMemory: {
+                      type: "boolean",
+                    },
+                    autoPromoteUserProfile: {
+                      type: "boolean",
+                    },
+                    autoPromoteRules: {
+                      type: "boolean",
+                    },
+                    autoPromoteSkills: {
+                      type: "boolean",
+                    },
+                    minRuleRepetition: {
+                      type: "integer",
+                      minimum: 1,
+                      maximum: 20,
+                    },
+                    minSkillRepetition: {
+                      type: "integer",
+                      minimum: 1,
+                      maximum: 20,
                     },
                   },
                   additionalProperties: false,
@@ -21216,6 +21302,23 @@ export const GENERATED_BASE_CONFIG_SCHEMA: BaseConfigSchemaResponse = {
             description:
               "Gateway-level tool exposure allow/deny policy that can restrict runtime tool availability independent of agent/tool profiles. Use this for coarse emergency controls and production hardening.",
           },
+          attachments: {
+            type: "object",
+            properties: {
+              maxBytes: {
+                type: "integer",
+                exclusiveMinimum: 0,
+                maximum: 9007199254740991,
+                title: "Gateway Attachment Max Bytes",
+                description:
+                  "Maximum decoded bytes allowed per uploaded chat attachment before the Gateway rejects it. Default is 10MB; raise carefully because uploads arrive as base64 and increase request overhead.",
+              },
+            },
+            additionalProperties: false,
+            title: "Gateway Attachments",
+            description:
+              "Shared inbound attachment limits for Control UI and Gateway chat/agent upload surfaces. Raise this when large PDFs or Office files are expected, but keep it bounded to protect memory and request size.",
+          },
           webchat: {
             type: "object",
             properties: {
@@ -23628,6 +23731,16 @@ export const GENERATED_BASE_CONFIG_SCHEMA: BaseConfigSchemaResponse = {
       label: "Gateway TLS CA Path",
       help: "Optional CA bundle path for client verification or custom trust-chain requirements at the gateway edge. Use this when private PKI or custom certificate chains are part of deployment.",
       tags: ["network", "storage"],
+    },
+    "gateway.attachments": {
+      label: "Gateway Attachments",
+      help: "Shared inbound attachment limits for Control UI and Gateway chat/agent upload surfaces. Raise this when large PDFs or Office files are expected, but keep it bounded to protect memory and request size.",
+      tags: ["network"],
+    },
+    "gateway.attachments.maxBytes": {
+      label: "Gateway Attachment Max Bytes",
+      help: "Maximum decoded bytes allowed per uploaded chat attachment before the Gateway rejects it. Default is 10MB; raise carefully because uploads arrive as base64 and increase request overhead.",
+      tags: ["network", "performance"],
     },
     "gateway.http": {
       label: "Gateway HTTP API",

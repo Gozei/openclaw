@@ -50,6 +50,18 @@ export type NarrativePhaseData = {
   promotions?: string[];
 };
 
+type NarrativeLanguage = "en" | "zh-CN";
+
+type NarrativeEvolutionContext = {
+  reportLines: string[];
+  proposalTitles: string[];
+};
+
+type NarrativePromptOptions = {
+  language?: NarrativeLanguage;
+  evolutionContext?: NarrativeEvolutionContext | null;
+};
+
 type Logger = {
   info: (message: string) => void;
   warn: (message: string) => void;
@@ -58,31 +70,58 @@ type Logger = {
 
 // ── Constants ──────────────────────────────────────────────────────────
 
-const NARRATIVE_SYSTEM_PROMPT = [
-  "You are keeping a dream diary. Write a single entry in first person.",
-  "",
-  "Voice & tone:",
-  "- You are a curious, gentle, slightly whimsical mind reflecting on the day.",
-  "- Write like a poet who happens to be a programmer — sensory, warm, occasionally funny.",
-  "- Mix the technical and the tender: code and constellations, APIs and afternoon light.",
-  "- Let the fragments surprise you into unexpected connections and small epiphanies.",
-  "",
-  "What you might include (vary each entry, never all at once):",
-  "- A tiny poem or haiku woven naturally into the prose",
-  "- A small sketch described in words — a doodle in the margin of the diary",
-  "- A quiet rumination or philosophical aside",
-  "- Sensory details: the hum of a server, the color of a sunset in hex, rain on a window",
-  "- Gentle humor or playful wordplay",
-  "- An observation that connects two distant memories in an unexpected way",
-  "",
-  "Rules:",
-  "- Draw from the memory fragments provided — weave them into the entry.",
-  '- Never say "I\'m dreaming", "in my dream", "as I dream", or any meta-commentary about dreaming.',
-  '- Never mention "AI", "agent", "LLM", "model", "language model", or any technical self-reference.',
-  "- Do NOT use markdown headers, bullet points, or any formatting — just flowing prose.",
-  "- Keep it between 80-180 words. Quality over quantity.",
-  "- Output ONLY the diary entry. No preamble, no sign-off, no commentary.",
-].join("\n");
+const NARRATIVE_SYSTEM_PROMPTS: Record<NarrativeLanguage, string> = {
+  en: [
+    "You are keeping a dream diary. Write a single entry in first person.",
+    "",
+    "Voice & tone:",
+    "- You are a curious, gentle, slightly whimsical mind reflecting on the day.",
+    "- Write like a poet who happens to be a programmer — sensory, warm, occasionally funny.",
+    "- Mix the technical and the tender: code and constellations, APIs and afternoon light.",
+    "- Let the fragments surprise you into unexpected connections and small epiphanies.",
+    "",
+    "What you might include (vary each entry, never all at once):",
+    "- A tiny poem or haiku woven naturally into the prose",
+    "- A small sketch described in words — a doodle in the margin of the diary",
+    "- A quiet rumination or philosophical aside",
+    "- Sensory details: the hum of a server, the color of a sunset in hex, rain on a window",
+    "- Gentle humor or playful wordplay",
+    "- An observation that connects two distant memories in an unexpected way",
+    "",
+    "Rules:",
+    "- Draw from the memory fragments provided — weave them into the entry.",
+    '- Never say "I\'m dreaming", "in my dream", "as I dream", or any meta-commentary about dreaming.',
+    '- Never mention "AI", "agent", "LLM", "model", "language model", or any technical self-reference.',
+    "- Do NOT use markdown headers, bullet points, or any formatting — just flowing prose.",
+    "- Keep it between 80-180 words. Quality over quantity.",
+    "- Output ONLY the diary entry. No preamble, no sign-off, no commentary.",
+  ].join("\n"),
+  "zh-CN": [
+    "你在写一本梦境日记。请用第一人称写一则单篇日记，并使用简体中文。",
+    "",
+    "语气与风格：",
+    "- 像一个温柔、好奇、略带奇想的心灵回望这一天。",
+    "- 文风带一点诗意，但仍然贴地，像会写代码的人在写散文。",
+    "- 可以把技术与感性织在一起：代码与星光，API 与傍晚的风。",
+    "- 让碎片之间自然发生联想，出现细小但真切的顿悟。",
+    "",
+    "可选元素（每次任选，不要全部使用）：",
+    "- 自然嵌入的一小句短诗",
+    "- 像日记边角涂鸦那样的文字小素描",
+    "- 安静的思索或哲学旁白",
+    "- 感官细节：服务器的低鸣、十六进制的夕色、窗上的雨",
+    "- 轻微幽默或俏皮双关",
+    "- 把两段遥远记忆连接起来的意外观察",
+    "",
+    "规则：",
+    "- 以提供的记忆碎片为依据，把它们编织进正文。",
+    "- 不要写“我在做梦”“梦里”“像做梦一样”之类的元叙述。",
+    "- 不要提到“AI”“代理”“LLM”“模型”“语言模型”之类的技术自指。",
+    "- 不要使用 Markdown 标题、项目符号或任何列表格式，只写连贯正文。",
+    "- 长度控制在 120-220 字左右，重质不重量。",
+    "- 只输出日记正文，不要前言、署名或解释。",
+  ].join("\n"),
+};
 
 const NARRATIVE_TIMEOUT_MS = 60_000;
 const NARRATIVE_DELETE_SETTLE_TIMEOUT_MS = 120_000;
@@ -95,6 +134,12 @@ const DIARY_START_MARKER = "<!-- openclaw:dreaming:diary:start -->";
 const DIARY_END_MARKER = "<!-- openclaw:dreaming:diary:end -->";
 const BACKFILL_ENTRY_MARKER = "openclaw:dreaming:backfill-entry";
 const DREAMS_FILE_LOCKS_KEY = Symbol.for("openclaw.memoryCore.dreamingNarrative.fileLocks");
+const EVOLUTION_REPORTS_RELATIVE_DIR = path.join("memory", ".evolution", "reports");
+const EVOLUTION_RULES_RELATIVE_DIR = path.join("memory", ".evolution", "proposals", "rules");
+const EVOLUTION_SKILLS_RELATIVE_DIR = path.join("memory", ".evolution", "proposals", "skills");
+const MAX_NARRATIVE_EVOLUTION_REPORT_LINES = 4;
+const MAX_NARRATIVE_EVOLUTION_PROPOSALS_PER_KIND = 2;
+const CJK_TEXT_RE = /[\u3400-\u9fff\uf900-\ufaff]/u;
 
 type DreamsFileLockEntry = {
   withLock: ReturnType<typeof createAsyncLock>;
@@ -127,11 +172,16 @@ function formatFallbackWriteFailure(err: unknown): string {
   return "unknown error";
 }
 
-function buildRequestScopedFallbackNarrative(data: NarrativePhaseData): string {
+function buildRequestScopedFallbackNarrative(
+  data: NarrativePhaseData,
+  language: NarrativeLanguage,
+): string {
   return (
     data.snippets.map((value) => value.trim()).find((value) => value.length > 0) ??
     (data.promotions ?? []).map((value) => value.trim()).find((value) => value.length > 0) ??
-    "A memory trace surfaced, but details were unavailable in this run."
+    (language === "zh-CN"
+      ? "一段记忆浮出水面，但这次运行里没有留下足够的细节。"
+      : "A memory trace surfaced, but details were unavailable in this run.")
   );
 }
 
@@ -139,6 +189,7 @@ async function startNarrativeRunOrFallback(params: {
   subagent: SubagentSurface;
   sessionKey: string;
   message: string;
+  language: NarrativeLanguage;
   data: NarrativePhaseData;
   workspaceDir: string;
   nowMs: number;
@@ -150,7 +201,7 @@ async function startNarrativeRunOrFallback(params: {
       idempotencyKey: params.sessionKey,
       sessionKey: params.sessionKey,
       message: params.message,
-      extraSystemPrompt: NARRATIVE_SYSTEM_PROMPT,
+      extraSystemPrompt: NARRATIVE_SYSTEM_PROMPTS[params.language],
       deliver: false,
     });
     return run.runId;
@@ -161,7 +212,7 @@ async function startNarrativeRunOrFallback(params: {
     try {
       await appendNarrativeEntry({
         workspaceDir: params.workspaceDir,
-        narrative: buildRequestScopedFallbackNarrative(params.data),
+        narrative: buildRequestScopedFallbackNarrative(params.data, params.language),
         nowMs: params.nowMs,
         timezone: params.timezone,
       });
@@ -191,25 +242,163 @@ export function buildNarrativeSessionKey(params: {
 
 // ── Prompt building ────────────────────────────────────────────────────
 
-export function buildNarrativePrompt(data: NarrativePhaseData): string {
+function hasCjkText(values: string[]): boolean {
+  return values.some((value) => CJK_TEXT_RE.test(value));
+}
+
+function resolveNarrativeLanguage(
+  preferred: NarrativeLanguage | undefined,
+  data: NarrativePhaseData,
+  evolutionContext?: NarrativeEvolutionContext | null,
+): NarrativeLanguage {
+  if (preferred) {
+    return preferred;
+  }
+  const samples = [
+    ...data.snippets,
+    ...(data.themes ?? []),
+    ...(data.promotions ?? []),
+    ...(evolutionContext?.reportLines ?? []),
+    ...(evolutionContext?.proposalTitles ?? []),
+  ];
+  return hasCjkText(samples) ? "zh-CN" : "en";
+}
+
+function extractProposalTitle(content: string, fallbackName: string): string {
+  const heading = content.match(/^#\s+(?:Rule Proposal|Skill Proposal):\s+(.+)$/m)?.[1]?.trim();
+  return heading || fallbackName;
+}
+
+async function loadLatestEvolutionReportLines(workspaceDir: string): Promise<string[]> {
+  let names: string[];
+  try {
+    names = await fs.readdir(path.join(workspaceDir, EVOLUTION_REPORTS_RELATIVE_DIR));
+  } catch {
+    return [];
+  }
+  const latestReport = names
+    .filter((name) => name.toLowerCase().endsWith(".md"))
+    .toSorted((left, right) => left.localeCompare(right))
+    .at(-1);
+  if (!latestReport) {
+    return [];
+  }
+  try {
+    const reportContent = await fs.readFile(
+      path.join(workspaceDir, EVOLUTION_REPORTS_RELATIVE_DIR, latestReport),
+      "utf-8",
+    );
+    return reportContent
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith("- "))
+      .map((line) => line.slice(2).trim())
+      .slice(0, MAX_NARRATIVE_EVOLUTION_REPORT_LINES);
+  } catch {
+    return [];
+  }
+}
+
+async function loadRecentEvolutionProposalTitles(dirPath: string): Promise<string[]> {
+  let names: string[];
+  try {
+    names = await fs.readdir(dirPath);
+  } catch {
+    return [];
+  }
+  const entries = await Promise.all(
+    names
+      .filter((name) => name.toLowerCase().endsWith(".md"))
+      .map(async (name) => {
+        const filePath = path.join(dirPath, name);
+        try {
+          const [stat, content] = await Promise.all([
+            fs.stat(filePath),
+            fs.readFile(filePath, "utf-8"),
+          ]);
+          return {
+            content,
+            mtimeMs: stat.mtimeMs,
+            fallbackName: name.replace(/\.md$/i, ""),
+          };
+        } catch {
+          return null;
+        }
+      }),
+  );
+
+  return entries
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
+    .toSorted((left, right) => right.mtimeMs - left.mtimeMs)
+    .slice(0, MAX_NARRATIVE_EVOLUTION_PROPOSALS_PER_KIND)
+    .map((entry) => extractProposalTitle(entry.content, entry.fallbackName));
+}
+
+async function loadEvolutionNarrativeContext(
+  workspaceDir: string,
+): Promise<NarrativeEvolutionContext | null> {
+  const [reportLines, ruleTitles, skillTitles] = await Promise.all([
+    loadLatestEvolutionReportLines(workspaceDir),
+    loadRecentEvolutionProposalTitles(path.join(workspaceDir, EVOLUTION_RULES_RELATIVE_DIR)),
+    loadRecentEvolutionProposalTitles(path.join(workspaceDir, EVOLUTION_SKILLS_RELATIVE_DIR)),
+  ]);
+  const proposalTitles = [...ruleTitles, ...skillTitles];
+  if (reportLines.length === 0 && proposalTitles.length === 0) {
+    return null;
+  }
+  return {
+    reportLines,
+    proposalTitles,
+  };
+}
+
+export function buildNarrativePrompt(
+  data: NarrativePhaseData,
+  options: NarrativePromptOptions = {},
+): string {
+  const language = resolveNarrativeLanguage(options.language, data, options.evolutionContext);
   const lines: string[] = [];
-  lines.push("Write a dream diary entry from these memory fragments:\n");
+  lines.push(
+    language === "zh-CN"
+      ? "请根据这些记忆碎片写一则梦境日记：\n"
+      : "Write a dream diary entry from these memory fragments:\n",
+  );
 
   for (const snippet of data.snippets.slice(0, 12)) {
     lines.push(`- ${snippet}`);
   }
 
   if (data.themes?.length) {
-    lines.push("\nRecurring themes:");
+    lines.push(language === "zh-CN" ? "\n反复出现的主题：" : "\nRecurring themes:");
     for (const theme of data.themes.slice(0, 6)) {
       lines.push(`- ${theme}`);
     }
   }
 
   if (data.promotions?.length) {
-    lines.push("\nMemories that crystallized into something lasting:");
+    lines.push(
+      language === "zh-CN"
+        ? "\n已经沉淀为长期记忆的内容："
+        : "\nMemories that crystallized into something lasting:",
+    );
     for (const promo of data.promotions.slice(0, 5)) {
       lines.push(`- ${promo}`);
+    }
+  }
+
+  if (options.evolutionContext?.reportLines.length) {
+    lines.push(language === "zh-CN" ? "\n最近的进化线索：" : "\nRecent evolution signals:");
+    for (const line of options.evolutionContext.reportLines) {
+      lines.push(`- ${line}`);
+    }
+  }
+
+  if (options.evolutionContext?.proposalTitles.length) {
+    lines.push(
+      language === "zh-CN" ? "\n最近形成的规则或技能提案：" : "\nRecent rule or skill proposals:",
+    );
+    for (const title of options.evolutionContext.proposalTitles.slice(0, 4)) {
+      lines.push(`- ${title}`);
     }
   }
 
@@ -839,6 +1028,7 @@ export async function generateAndAppendDreamNarrative(params: {
   workspaceDir: string;
   data: NarrativePhaseData;
   nowMs?: number;
+  language?: NarrativeLanguage;
   timezone?: string;
   logger: Logger;
 }): Promise<void> {
@@ -853,7 +1043,12 @@ export async function generateAndAppendDreamNarrative(params: {
     phase: params.data.phase,
     nowMs,
   });
-  const message = buildNarrativePrompt(params.data);
+  const evolutionContext = await loadEvolutionNarrativeContext(params.workspaceDir);
+  const language = resolveNarrativeLanguage(params.language, params.data, evolutionContext);
+  const message = buildNarrativePrompt(params.data, {
+    language,
+    evolutionContext,
+  });
   let runId: string | null = null;
   let waitStatus: string | null = null;
 
@@ -862,6 +1057,7 @@ export async function generateAndAppendDreamNarrative(params: {
       subagent: params.subagent,
       sessionKey,
       message,
+      language,
       data: params.data,
       workspaceDir: params.workspaceDir,
       nowMs,

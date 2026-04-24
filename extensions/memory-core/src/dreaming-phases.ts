@@ -36,6 +36,7 @@ type Logger = Pick<OpenClawPluginApi["logger"], "info" | "warn" | "error">;
 type DreamingHostConfig = unknown;
 type DreamingPhaseStorageConfig = {
   timezone?: string;
+  narrativeLanguage?: "en" | "zh-CN";
   storage: { mode: "inline" | "separate" | "both"; separateReports: boolean };
 };
 type LightDreamingConfig = DreamingPhaseStorageConfig & {
@@ -1558,6 +1559,7 @@ async function runLightDreaming(params: {
       workspaceDir: params.workspaceDir,
       data,
       nowMs,
+      language: params.config.narrativeLanguage,
       timezone: params.config.timezone,
       logger: params.logger,
     });
@@ -1637,6 +1639,7 @@ async function runRemDreaming(params: {
       workspaceDir: params.workspaceDir,
       data,
       nowMs,
+      language: params.config.narrativeLanguage,
       timezone: params.config.timezone,
       logger: params.logger,
     });

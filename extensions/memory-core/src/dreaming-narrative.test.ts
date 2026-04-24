@@ -74,6 +74,33 @@ describe("buildNarrativePrompt", () => {
     expect(prompt).toContain("snippet-11");
     expect(prompt).not.toContain("snippet-12");
   });
+
+  it("auto-detects Chinese source material for the narrative prompt", () => {
+    const prompt = buildNarrativePrompt({
+      phase: "light",
+      snippets: ["今天把进化总结接到了梦境里"],
+    });
+    expect(prompt).toContain("请根据这些记忆碎片写一则梦境日记");
+  });
+
+  it("includes evolution context with Chinese headings when requested", () => {
+    const prompt = buildNarrativePrompt(
+      {
+        phase: "deep",
+        snippets: ["将失败模式沉淀进了规则提案"],
+      },
+      {
+        language: "zh-CN",
+        evolutionContext: {
+          reportLines: ["Cycles: 4 vs 2 yesterday"],
+          proposalTitles: ["Check failing lanes first"],
+        },
+      },
+    );
+    expect(prompt).toContain("最近的进化线索");
+    expect(prompt).toContain("最近形成的规则或技能提案");
+    expect(prompt).toContain("Check failing lanes first");
+  });
 });
 
 describe("extractNarrativeText", () => {
@@ -611,6 +638,46 @@ describe("generateAndAppendDreamNarrative", () => {
     const content = await fs.readFile(path.join(workspaceDir, "DREAMS.md"), "utf-8");
     expect(content).toContain("The repository whispered of forgotten endpoints.");
     expect(logger.info).toHaveBeenCalled();
+  });
+
+  it("passes Chinese prompts and recent evolution context into the subagent", async () => {
+    const workspaceDir = await createTempWorkspace("openclaw-dreaming-narrative-");
+    const subagent = createMockSubagent("代码在夜里慢慢沉淀成了新的秩序。");
+    const logger = createMockLogger();
+
+    await fs.mkdir(path.join(workspaceDir, "memory", ".evolution", "reports"), { recursive: true });
+    await fs.mkdir(path.join(workspaceDir, "memory", ".evolution", "proposals", "rules"), {
+      recursive: true,
+    });
+    await fs.writeFile(
+      path.join(workspaceDir, "memory", ".evolution", "reports", "2026-04-23.md"),
+      "# 进化报告 2026-04-23\n\n- Cycles: 4 vs 2 yesterday\n- Successes: 3 vs 1 yesterday\n",
+      "utf-8",
+    );
+    await fs.writeFile(
+      path.join(workspaceDir, "memory", ".evolution", "proposals", "rules", "ci.md"),
+      "# Rule Proposal: Check failing lanes first\n\n## Proposal\n\nStart with the failing lane.\n",
+      "utf-8",
+    );
+
+    await generateAndAppendDreamNarrative({
+      subagent,
+      workspaceDir,
+      data: {
+        phase: "light",
+        snippets: ["今天把进化报告织进了梦境叙事"],
+      },
+      language: "zh-CN",
+      logger,
+    });
+
+    expect(subagent.run).toHaveBeenCalledOnce();
+    expect(subagent.run.mock.calls[0]?.[0]?.extraSystemPrompt).toContain(
+      "请用第一人称写一则单篇日记",
+    );
+    expect(subagent.run.mock.calls[0]?.[0]?.message).toContain("最近的进化线索");
+    expect(subagent.run.mock.calls[0]?.[0]?.message).toContain("Cycles: 4 vs 2 yesterday");
+    expect(subagent.run.mock.calls[0]?.[0]?.message).toContain("Check failing lanes first");
   });
 
   it("skips narrative when no snippets are available", async () => {

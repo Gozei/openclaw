@@ -67,6 +67,7 @@ import type {
   WikiImportInsights,
   WikiMemoryPalace,
 } from "./controllers/dreaming.ts";
+import type { EvolutionStatus } from "./controllers/evolution.ts";
 import type { ExecApprovalRequest } from "./controllers/exec-approval.ts";
 import type { ExecApprovalsFile, ExecApprovalsSnapshot } from "./controllers/exec-approvals.ts";
 import type {
@@ -239,6 +240,9 @@ export class OpenClawApp extends LitElement {
   @state() dreamingStatusError: string | null = null;
   @state() dreamingStatus: DreamingStatus | null = null;
   @state() dreamingModeSaving = false;
+  @state() evolutionLoading = false;
+  @state() evolutionError: string | null = null;
+  @state() evolutionStatus: EvolutionStatus | null = null;
   @state() dreamDiaryLoading = false;
   @state() dreamDiaryActionLoading = false;
   @state() dreamDiaryActionMessage: { kind: "success" | "error"; text: string } | null = null;

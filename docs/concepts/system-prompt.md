@@ -39,6 +39,9 @@ The prompt is intentionally compact and uses fixed sections:
   results, check mutable state live, and verify before finalizing.
 - **Safety**: short guardrail reminder to avoid power-seeking behavior or bypassing oversight.
 - **Skills** (when available): tells the model how to load skill instructions on demand.
+- **Evolution Recall** (when available): surfaces relevant generated skills,
+  repeated failures, and reusable workflows before execution so the agent can
+  reuse prior lessons proactively.
 - **OpenClaw Self-Update**: how to inspect config safely with
   `config.schema.lookup`, patch config with `config.patch`, replace the full
   config with `config.apply`, and run `update.run` only on explicit user
@@ -197,6 +200,28 @@ Generic bounded runtime excerpts use a different surface:
 
 That split keeps skills sizing separate from runtime read/injection sizing such
 as `memory_get`, live tool results, and post-compaction AGENTS.md refreshes.
+
+## Evolution Recall
+
+When `memory/.evolution/` has relevant artifacts for the current prompt,
+OpenClaw can inject a compact **Evolution Recall** section into the system
+prompt.
+
+This section is runtime-generated and may include:
+
+- generated workspace skills under `skills/evolution-*/SKILL.md`
+- repeated failure signatures plus the latest workaround
+- reusable workflows with opening steps and success cues from prior successful runs
+
+When a generated skill matches, the recall block includes the relative
+`SKILL.md` path and explicitly nudges the agent to read it before improvising.
+
+When a reusable workflow matches but no generated skill clearly fits yet, the
+recall block can still surface the workflow's first step so execution changes
+before full skill promotion.
+
+The goal is to change execution before the model starts acting, not only after
+the task finishes.
 
 ## Documentation
 

@@ -139,6 +139,17 @@ const invokeDoctorMemoryDedupeDreamDiary = async (respond: ReturnType<typeof vi.
   });
 };
 
+const invokeDoctorMemoryEvolutionStatus = async (respond: ReturnType<typeof vi.fn>) => {
+  await doctorHandlers["doctor.memory.evolutionStatus"]({
+    req: {} as never,
+    params: {} as never,
+    respond: respond as never,
+    context: {} as never,
+    client: null,
+    isWebchatConnect: () => false,
+  });
+};
+
 const expectEmbeddingErrorResponse = (respond: ReturnType<typeof vi.fn>, error: string) => {
   expect(respond).toHaveBeenCalledWith(
     true,
@@ -1013,6 +1024,197 @@ describe("doctor.memory.dreamDiary", () => {
           agentId: "main",
           action: "reset",
           removedEntries: 3,
+        }),
+        undefined,
+      );
+    } finally {
+      await fs.rm(workspaceDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("doctor.memory.evolutionStatus", () => {
+  it("reads evolution metrics, excerpts, failures, workflows, and proposals from the workspace", async () => {
+    const workspaceDir = await fs.mkdtemp(path.join(os.tmpdir(), "doctor-memory-evolution-"));
+    resolveAgentWorkspaceDir.mockReturnValue(workspaceDir);
+
+    const date = "2026-04-23";
+    await fs.mkdir(path.join(workspaceDir, "memory", ".evolution", "reports"), { recursive: true });
+    await fs.mkdir(path.join(workspaceDir, "memory", ".evolution", "proposals", "rules"), {
+      recursive: true,
+    });
+    await fs.mkdir(path.join(workspaceDir, "memory", ".evolution", "proposals", "skills"), {
+      recursive: true,
+    });
+    await fs.mkdir(path.join(workspaceDir, "skills", "evolution-ci-triage"), {
+      recursive: true,
+    });
+    await fs.writeFile(
+      path.join(workspaceDir, "memory", ".evolution", "metrics.json"),
+      `${JSON.stringify(
+        {
+          days: [
+            {
+              date,
+              cycles: 4,
+              successes: 2,
+              failures: 2,
+              repeatedFailures: 1,
+              recoveredFailures: 0,
+              bySource: {
+                task: 1,
+                subagent: 3,
+                heartbeat: 0,
+                compaction: 0,
+              },
+              candidatesByKind: {
+                daily_memory: 4,
+                memory: 1,
+                user_profile: 0,
+                rule_proposal: 1,
+                skill_proposal: 1,
+              },
+              appliedByKind: {
+                daily_memory: 4,
+                memory: 1,
+                user_profile: 0,
+                rule_proposal: 1,
+                skill_proposal: 0,
+              },
+            },
+          ],
+        },
+        null,
+        2,
+      )}\n`,
+      "utf-8",
+    );
+    await fs.writeFile(
+      path.join(workspaceDir, "memory", `${date}.md`),
+      "## Lessons\n- Start with the failing lane before rerunning the full suite.\n",
+      "utf-8",
+    );
+    await fs.writeFile(
+      path.join(workspaceDir, "memory", ".evolution", "reports", `${date}.md`),
+      `# 进化报告 ${date}\n\n- Cycles: 4 vs 0 yesterday\n`,
+      "utf-8",
+    );
+    await fs.writeFile(
+      path.join(workspaceDir, "memory", ".evolution", "failures.json"),
+      `${JSON.stringify(
+        [
+          {
+            signature: "task:subagent:failed:ci",
+            count: 2,
+            firstSeenAt: Date.parse("2026-04-23T09:00:00.000Z"),
+            lastSeenAt: Date.parse("2026-04-23T09:05:00.000Z"),
+            lastWorkaround: "Inspect failing checks first.",
+            promotedToRule: true,
+            promotedToSkill: false,
+          },
+        ],
+        null,
+        2,
+      )}\n`,
+      "utf-8",
+    );
+    await fs.writeFile(
+      path.join(workspaceDir, "memory", ".evolution", "workflows.json"),
+      `${JSON.stringify(
+        [
+          {
+            key: "ci triage::ci fails on pr",
+            count: 1,
+            firstSeenAt: Date.parse("2026-04-23T09:10:00.000Z"),
+            lastSeenAt: Date.parse("2026-04-23T09:10:00.000Z"),
+          },
+        ],
+        null,
+        2,
+      )}\n`,
+      "utf-8",
+    );
+    await fs.writeFile(
+      path.join(workspaceDir, "memory", ".evolution", "proposals", "rules", "ci-triage-rule.md"),
+      [
+        "# Rule Proposal: Check failing lanes first",
+        "",
+        "Created At: 2026-04-23T09:05:00.000Z",
+        "Reflection Event: evt-1",
+        "",
+        "When CI logs are available, inspect failing checks before rerunning the full suite.",
+        "",
+      ].join("\n"),
+      "utf-8",
+    );
+    await fs.writeFile(
+      path.join(workspaceDir, "skills", "evolution-ci-triage", "SKILL.md"),
+      [
+        "---",
+        "name: evolution-ci-triage",
+        'description: "CI triage. Use when CI fails on PR."',
+        "---",
+        "",
+        "# Purpose",
+        "",
+        "Use this generated skill when: CI fails on PR",
+        "",
+        "# Workflow",
+        "",
+        "1. Inspect the failing lane.",
+      ].join("\n"),
+      "utf-8",
+    );
+
+    const respond = vi.fn();
+    try {
+      await invokeDoctorMemoryEvolutionStatus(respond);
+      expect(respond).toHaveBeenCalledWith(
+        true,
+        expect.objectContaining({
+          agentId: "main",
+          enabled: true,
+          workspaceDir,
+          snapshot: expect.objectContaining({
+            comparison: expect.objectContaining({
+              summary: expect.arrayContaining([expect.stringContaining("Cycles: 4")]),
+              today: expect.objectContaining({
+                cycles: 4,
+                repeatedFailures: 1,
+              }),
+            }),
+            latestDailyMemory: expect.objectContaining({
+              path: `memory/${date}.md`,
+            }),
+            latestReport: expect.objectContaining({
+              path: `memory/.evolution/reports/${date}.md`,
+            }),
+            failures: [
+              expect.objectContaining({
+                signature: "task:subagent:failed:ci",
+                count: 2,
+              }),
+            ],
+            workflows: [
+              expect.objectContaining({
+                key: "ci triage::ci fails on pr",
+                count: 1,
+              }),
+            ],
+            generatedSkills: [
+              expect.objectContaining({
+                title: "evolution-ci-triage",
+                path: "skills/evolution-ci-triage/SKILL.md",
+              }),
+            ],
+            proposals: expect.objectContaining({
+              rules: [
+                expect.objectContaining({
+                  title: "Check failing lanes first",
+                }),
+              ],
+            }),
+          }),
         }),
         undefined,
       );

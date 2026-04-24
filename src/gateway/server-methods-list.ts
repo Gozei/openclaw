@@ -5,6 +5,7 @@ const BASE_METHODS = [
   "health",
   "doctor.memory.status",
   "doctor.memory.dreamDiary",
+  "doctor.memory.evolutionStatus",
   "doctor.memory.backfillDreamDiary",
   "doctor.memory.resetDreamDiary",
   "doctor.memory.resetGroundedShortTerm",

@@ -512,8 +512,8 @@
 
 .nav-section {
   display: grid;
-  gap: 6px;
-  margin-bottom: 18px;
+  gap: 5px;
+  margin-bottom: 14px;
 }
 
 .nav-section:last-child {
@@ -554,10 +554,26 @@
 }
 
 .nav-section__label-text {
+  flex: 1 1 auto;
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
+}
+
+.nav-section__label-meta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-hover) 80%, transparent);
+  color: color-mix(in srgb, var(--muted) 78%, var(--text) 22%);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
 }
 
 .nav-section__chevron {

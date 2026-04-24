@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   loadCronStatusMock: vi.fn(async () => {}),
   loadCronJobsPageMock: vi.fn(async () => {}),
   loadCronRunsMock: vi.fn(async () => {}),
+  loadEvolutionStatusMock: vi.fn(async () => {}),
   loadLogsMock: vi.fn(async () => {}),
 }));
 
@@ -49,6 +50,9 @@ vi.mock("./controllers/cron.ts", () => ({
   loadCronStatus: mocks.loadCronStatusMock,
   loadCronJobsPage: mocks.loadCronJobsPageMock,
   loadCronRuns: mocks.loadCronRunsMock,
+}));
+vi.mock("./controllers/evolution.ts", () => ({
+  loadEvolutionStatus: mocks.loadEvolutionStatusMock,
 }));
 vi.mock("./controllers/logs.ts", () => ({
   loadLogs: mocks.loadLogsMock,
@@ -148,5 +152,14 @@ describe("refreshActiveTab", () => {
     expect(host.logsAtBottom).toBe(true);
     expect(mocks.loadLogsMock).toHaveBeenCalledWith(host, { reset: true });
     expect(mocks.scheduleLogsScrollMock).toHaveBeenCalledWith(host, true);
+  });
+
+  it("refreshes evolution tab through the evolution loader", async () => {
+    const host = createHost();
+    host.tab = "evolution";
+
+    await refreshActiveTab(host as never);
+
+    expect(mocks.loadEvolutionStatusMock).toHaveBeenCalledWith(host);
   });
 });

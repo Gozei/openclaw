@@ -5,6 +5,7 @@ import type { CliSessionBinding } from "../../config/sessions.js";
 import type { SessionSystemPromptReport } from "../../config/sessions/types.js";
 import type { CliBackendConfig } from "../../config/types.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
+import type { EvolutionRecallTrace } from "../../evolution/preflight.js";
 import type { PromptImageOrderEntry } from "../../media/prompt-image-order.js";
 import type { ResolvedCliBackend } from "../cli-backends.js";
 import type { SkillSnapshot } from "../skills.js";
@@ -68,4 +69,5 @@ export type PreparedCliRunContext = {
   heartbeatPrompt?: string;
   authEpoch?: string;
   extraSystemPromptHash?: string;
+  evolutionRecall?: EvolutionRecallTrace;
 };

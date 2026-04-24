@@ -3,6 +3,11 @@ import path from "node:path";
 import { resolveAgentWorkspaceDir, resolveDefaultAgentId } from "../../agents/agent-scope.js";
 import { loadConfig } from "../../config/config.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
+import { resolveEvolutionConfig } from "../../evolution/config.js";
+import {
+  loadEvolutionDashboardSnapshot,
+  type EvolutionDashboardSnapshot,
+} from "../../evolution/dashboard.js";
 import {
   isSameMemoryDreamingDay,
   resolveMemoryDeepDreamingConfig,
@@ -148,6 +153,13 @@ export type DoctorMemoryDreamActionPayload = {
   warnings?: string[];
   dedupedEntries?: number;
   keptEntries?: number;
+};
+
+export type DoctorMemoryEvolutionPayload = {
+  agentId: string;
+  enabled: boolean;
+  workspaceDir: string;
+  snapshot: EvolutionDashboardSnapshot;
 };
 
 function extractIsoDayFromPath(filePath: string): string | null {
@@ -1002,6 +1014,19 @@ export const doctorHandlers: GatewayRequestHandlers = {
       removedEntries: dedupe.removed,
       dedupedEntries: dedupe.removed,
       keptEntries: dedupe.kept,
+    };
+    respond(true, payload, undefined);
+  },
+  "doctor.memory.evolutionStatus": async ({ respond }) => {
+    const cfg = loadConfig();
+    const agentId = resolveDefaultAgentId(cfg);
+    const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
+    const snapshot = await loadEvolutionDashboardSnapshot(workspaceDir);
+    const payload: DoctorMemoryEvolutionPayload = {
+      agentId,
+      enabled: resolveEvolutionConfig(cfg, agentId).enabled,
+      workspaceDir,
+      snapshot,
     };
     respond(true, payload, undefined);
   },

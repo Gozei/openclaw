@@ -165,6 +165,7 @@ export const zh_TW: TranslationMap = {
     debug: "調試",
     logs: "日誌",
     dreams: "夢境",
+    evolution: "進化",
   },
   subtitles: {
     agents: "工作區、工具、身份。",
@@ -186,6 +187,7 @@ export const zh_TW: TranslationMap = {
     debug: "快照、事件、RPC。",
     logs: "實時網關日誌。",
     dreams: "睡眠期間的記憶整合。",
+    evolution: "Self-improvement metrics, lessons, and promotions for 進化.",
   },
   overview: {
     access: {
@@ -408,6 +410,37 @@ export const zh_TW: TranslationMap = {
       simmeringIdeas: "正在醞釀尚未成形的想法…",
       whisperingVectorStore: "正在向向量儲存低語…",
     },
+  },
+  evolutionView: {
+    title: "進化",
+    subtitle: "Summaries, promotions, and proof that the agent improved after work.",
+    workspace: "Workspace: {path}",
+    enabledHint:
+      "進化 is enabled. Send a chat turn, then refresh this tab to watch the counters and promotions move.",
+    disabledHint:
+      "進化 is disabled in config. Existing artifacts may still be visible, but new turns will not promote lessons until it is re-enabled.",
+    emptyHint: "No 進化 data yet. Run a task or send a chat turn, then refresh.",
+    noDataYet: "No data yet.",
+    summaryRepeatFailuresTitle: "Repeat Failures",
+    summaryRepeatFailuresEmpty: "No repeat failures recorded yet.",
+    summaryReusableWorkflowsTitle: "Reusable Workflows",
+    summaryReusableWorkflowsEmpty: "No workflow reuse recorded yet.",
+    latestDailyMemory: "Latest Daily Memory",
+    latestReport: "Latest 進化 Report",
+    ruleProposals: "Rule Proposals",
+    skillProposals: "Skill Proposals",
+    noProposalsYet: "No proposals yet.",
+    cycles: "Cycles",
+    successes: "Successes",
+    failures: "Failures",
+    repeatedFailures: "Repeated failures",
+    appliedRules: "Applied rules",
+    appliedSkills: "Applied skills",
+    candidates: "Candidates: {count}",
+    count: "Count: {count}",
+    lastSeen: "Last seen: {time}",
+    workaround: "Workaround: {text}",
+    created: "Created: {time}",
   },
   usage: {
     page: {

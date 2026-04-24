@@ -100,6 +100,7 @@ describe("gateway control-plane write rate limit", () => {
         code: "UNAVAILABLE",
         retryable: true,
       }),
+      undefined,
     );
     expect(logWarn).toHaveBeenCalledTimes(1);
   });
@@ -122,12 +123,13 @@ describe("gateway control-plane write rate limit", () => {
       false,
       undefined,
       expect.objectContaining({ code: "UNAVAILABLE" }),
+      undefined,
     );
 
     vi.advanceTimersByTime(60_001);
 
     const allowed = await runRequest({ method: "update.run", context, client, handler });
-    expect(allowed).toHaveBeenCalledWith(true, undefined, undefined);
+    expect(allowed).toHaveBeenCalledWith(true, undefined, undefined, undefined);
     expect(handlerCalls).toHaveBeenCalledTimes(4);
   });
 
@@ -155,6 +157,7 @@ describe("gateway control-plane write rate limit", () => {
         retryAfterMs: 500,
         details: { method: "models.list" },
       }),
+      undefined,
     );
   });
 

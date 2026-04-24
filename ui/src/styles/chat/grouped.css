@@ -184,7 +184,11 @@
 .chat-avatar.assistant {
   background:
     radial-gradient(circle at 32% 28%, color-mix(in srgb, white 88%, transparent), transparent 48%),
-    linear-gradient(180deg, color-mix(in srgb, var(--bg-elevated) 98%, white 2%), color-mix(in srgb, var(--bg-hover) 84%, transparent));
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--bg-elevated) 98%, white 2%),
+      color-mix(in srgb, var(--bg-hover) 84%, transparent)
+    );
   color: var(--text-strong);
   border-color: color-mix(in srgb, var(--border) 88%, transparent);
 }
@@ -228,13 +232,12 @@ img.chat-avatar {
 
 .chat-group.assistant .chat-bubble {
   border-color: color-mix(in srgb, var(--border) 88%, transparent);
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, white 82%, var(--bg-elevated) 18%) 0%,
-      color-mix(in srgb, var(--bg-elevated) 98%, transparent) 18%,
-      color-mix(in srgb, var(--bg-elevated) 100%, transparent) 100%
-    );
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, white 82%, var(--bg-elevated) 18%) 0%,
+    color-mix(in srgb, var(--bg-elevated) 98%, transparent) 18%,
+    color-mix(in srgb, var(--bg-elevated) 100%, transparent) 100%
+  );
   border-radius: 22px;
   padding: 18px 20px 16px;
   box-shadow:
@@ -261,7 +264,9 @@ img.chat-avatar {
   margin-top: 0.7em;
 }
 
-.chat-group.assistant .chat-bubble :where(p:first-child, ul:first-child, ol:first-child, pre:first-child, blockquote:first-child) {
+.chat-group.assistant
+  .chat-bubble
+  :where(p:first-child, ul:first-child, ol:first-child, pre:first-child, blockquote:first-child) {
   margin-top: 0;
 }
 
@@ -381,13 +386,12 @@ img.chat-avatar {
 }
 
 .chat-group.assistant .chat-bubble:hover {
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, white 86%, var(--bg-elevated) 14%) 0%,
-      color-mix(in srgb, var(--bg-hover) 92%, var(--bg-elevated) 8%) 22%,
-      color-mix(in srgb, var(--bg-elevated) 100%, transparent) 100%
-    );
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, white 86%, var(--bg-elevated) 14%) 0%,
+    color-mix(in srgb, var(--bg-hover) 92%, var(--bg-elevated) 8%) 22%,
+    color-mix(in srgb, var(--bg-elevated) 100%, transparent) 100%
+  );
   border-color: color-mix(in srgb, var(--border-hover) 62%, transparent);
   box-shadow:
     0 1px 0 color-mix(in srgb, white 78%, transparent),

@@ -344,8 +344,11 @@
 
 .chat-assistant-attachment-card--document {
   align-items: flex-start;
-  background:
-    linear-gradient(160deg, color-mix(in srgb, var(--card) 84%, var(--bg)), color-mix(in srgb, var(--panel-2) 82%, var(--bg)));
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--card) 84%, var(--bg)),
+    color-mix(in srgb, var(--panel-2) 82%, var(--bg))
+  );
 }
 
 .chat-assistant-attachment-card--audio audio,
@@ -415,7 +418,11 @@
   align-items: center;
   justify-content: center;
   border-radius: 12px;
-  background: linear-gradient(145deg, color-mix(in srgb, var(--accent) 22%, var(--panel)), color-mix(in srgb, var(--accent-2, var(--accent)) 14%, var(--panel-2)));
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--accent) 22%, var(--panel)),
+    color-mix(in srgb, var(--accent-2, var(--accent)) 14%, var(--panel-2))
+  );
   color: var(--text);
   font-size: 11px;
   font-weight: 800;
@@ -912,8 +919,11 @@
   border-radius: var(--radius-sm);
   overflow: hidden;
   border: 1px solid var(--border);
-  background:
-    linear-gradient(160deg, color-mix(in srgb, var(--panel) 84%, transparent), color-mix(in srgb, var(--panel-2) 78%, transparent));
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--panel) 84%, transparent),
+    color-mix(in srgb, var(--panel-2) 78%, transparent)
+  );
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
 }
 
@@ -969,7 +979,11 @@
   align-items: center;
   justify-content: center;
   border-radius: 12px;
-  background: linear-gradient(145deg, color-mix(in srgb, var(--accent) 22%, var(--panel)), color-mix(in srgb, var(--accent-2, var(--accent)) 14%, var(--panel-2)));
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--accent) 22%, var(--panel)),
+    color-mix(in srgb, var(--accent-2, var(--accent)) 14%, var(--panel-2))
+  );
   color: var(--text);
   font-size: 0.72rem;
   font-weight: 800;

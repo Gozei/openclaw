@@ -91,6 +91,14 @@ async function deliverMediaReplyForTest(outboundSession: DeliverParams["outbound
 describe("normalizeAgentCommandReplyPayloads", () => {
   beforeEach(() => {
     setActivePluginRegistry(slackRegistry);
+    deliverOutboundPayloadsMock.mockReset();
+    createReplyMediaPathNormalizerMock.mockReset();
+    deliverOutboundPayloadsMock.mockResolvedValue([]);
+    createReplyMediaPathNormalizerMock.mockImplementation(
+      (..._args: unknown[]) =>
+        (payload: ReplyPayload) =>
+          Promise.resolve(payload),
+    );
   });
 
   afterEach(() => {
@@ -178,6 +186,89 @@ describe("normalizeAgentCommandReplyPayloads", () => {
     expect(runtime.log).toHaveBeenCalledTimes(1);
     expect(runtime.log).toHaveBeenCalledWith("Options: on, off.");
     expect(delivered.payloads).toMatchObject([{ text: "Options: on, off." }]);
+  });
+
+  it("prepends a local evolution recall notice for non-delivered previews", async () => {
+    const runtime = {
+      log: vi.fn(),
+    };
+
+    const delivered = await deliverAgentCommandResult({
+      cfg: {} as OpenClawConfig,
+      deps: {} as CliDeps,
+      runtime: runtime as never,
+      opts: {
+        message: "test",
+        channel: "chat",
+      } as AgentCommandOpts,
+      outboundSession: undefined,
+      sessionEntry: undefined,
+      payloads: [{ text: "Targeted rerun plan." }],
+      result: createResult({
+        meta: {
+          durationMs: 1,
+          evolutionRecall: {
+            sourceLabel: "CI triage",
+            openingMove: "Inspect the failing lane first",
+            recommendedActions: [
+              "Use the recent workflow start from CI triage: Inspect the failing lane first",
+            ],
+            matchedSkills: [],
+            matchedWorkflows: [],
+            matchedFailures: [],
+          },
+        },
+      }),
+    });
+
+    expect(runtime.log).toHaveBeenNthCalledWith(
+      1,
+      "Recall: CI triage\nFirst move: Inspect the failing lane first",
+    );
+    expect(runtime.log).toHaveBeenNthCalledWith(2, "Targeted rerun plan.");
+    expect(delivered.payloads).toMatchObject([
+      { text: "Recall: CI triage\nFirst move: Inspect the failing lane first" },
+      { text: "Targeted rerun plan." },
+    ]);
+  });
+
+  it("does not prepend a recall notice to external delivered messages", async () => {
+    deliverOutboundPayloadsMock.mockResolvedValue([]);
+
+    await deliverAgentCommandResult({
+      cfg: {} as OpenClawConfig,
+      deps: {} as CliDeps,
+      runtime: { log: vi.fn(), error: vi.fn() } as never,
+      opts: {
+        message: "test",
+        deliver: true,
+        replyChannel: "slack",
+        replyTo: "#general",
+      } as AgentCommandOpts,
+      outboundSession: undefined,
+      sessionEntry: undefined,
+      payloads: [{ text: "Targeted rerun plan." }],
+      result: createResult({
+        meta: {
+          durationMs: 1,
+          evolutionRecall: {
+            sourceLabel: "CI triage",
+            openingMove: "Inspect the failing lane first",
+            recommendedActions: [
+              "Use the recent workflow start from CI triage: Inspect the failing lane first",
+            ],
+            matchedSkills: [],
+            matchedWorkflows: [],
+            matchedFailures: [],
+          },
+        },
+      }),
+    });
+
+    const [firstCallArg] = deliverOutboundPayloadsMock.mock.calls.at(-1) ?? [];
+    expect((firstCallArg as { payloads?: ReplyPayload[] } | undefined)?.payloads).toMatchObject([
+      { text: "Targeted rerun plan." },
+    ]);
   });
 
   it("normalizes reply-media paths before outbound delivery", async () => {

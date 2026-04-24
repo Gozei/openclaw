@@ -1,4 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+const { mockMaybeTriggerEvolutionForTasks } = vi.hoisted(() => ({
+  mockMaybeTriggerEvolutionForTasks: vi.fn(),
+}));
+vi.mock("../evolution/auto.js", () => ({
+  maybeTriggerEvolutionForTasks: mockMaybeTriggerEvolutionForTasks,
+}));
 import {
   cancelDetachedTaskRunById,
   completeTaskRunByRunId,
@@ -56,6 +62,7 @@ describe("detached-task-runtime", () => {
   afterEach(() => {
     resetDetachedTaskLifecycleRuntimeForTests();
     mockLogWarn.mockClear();
+    mockMaybeTriggerEvolutionForTasks.mockClear();
   });
 
   it("dispatches lifecycle operations through the installed runtime", async () => {
@@ -137,9 +144,11 @@ describe("detached-task-runtime", () => {
     expect(fakeRuntime.completeTaskRunByRunId).toHaveBeenCalledWith(
       expect.objectContaining({ runId: "run-running", endedAt: 30 }),
     );
+    expect(mockMaybeTriggerEvolutionForTasks).toHaveBeenCalledWith(updatedTasks);
     expect(fakeRuntime.failTaskRunByRunId).toHaveBeenCalledWith(
       expect.objectContaining({ runId: "run-running", endedAt: 40 }),
     );
+    expect(mockMaybeTriggerEvolutionForTasks).toHaveBeenCalledWith(updatedTasks);
     expect(fakeRuntime.setDetachedTaskDeliveryStatusByRunId).toHaveBeenCalledWith(
       expect.objectContaining({ runId: "run-running", deliveryStatus: "delivered" }),
     );

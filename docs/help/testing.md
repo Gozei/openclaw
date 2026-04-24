@@ -18,6 +18,9 @@ This doc is a “how we test” guide:
 - How live tests discover credentials and select models/providers
 - How to add regressions for real-world model/provider issues
 
+For hands-on validation of the evolution loop, see
+[Evolution Manual Testing](/help/evolution-manual-testing).
+
 ## Quick start
 
 Most days:
@@ -972,6 +975,57 @@ Future evals should stay deterministic first:
 - A scenario runner using mock providers to assert tool calls + order, skill file reads, and session wiring.
 - A small suite of skill-focused scenarios (use vs avoid, gating, prompt injection).
 - Optional live evals (opt-in, env-gated) only after the CI-safe suite is in place.
+
+## 进化 smoke
+
+Use the repo smoke script when you want a fast manual check of the new evolution loop without wiring a real chat surface first.
+
+Command:
+
+- `pnpm evolution:smoke`
+- `pnpm evolution:smoke -- --workspace .artifacts/evolution-manual`
+- `pnpm evolution:smoke -- --workspace .artifacts/evolution-manual --cleanup`
+
+Use `--cleanup` only for disposable verification. Omit it when you want to open the generated files by hand after the run.
+
+What it covers in one run:
+
+- A main-session reply writes evolution notes and metrics.
+- Two repeated detached-task failures promote a rule proposal.
+- A later detached-task success increments workflow reuse and report metrics.
+
+Expected outputs under the chosen workspace:
+
+- `memory/YYYY-MM-DD.md`
+- `MEMORY.md`
+- `skills/evolution-*/SKILL.md`
+- `memory/.evolution/failures.json`
+- `memory/.evolution/workflows.json`
+- `memory/.evolution/metrics.json`
+- `memory/.evolution/reports/YYYY-MM-DD.md`
+- `memory/.evolution/proposals/rules/*.md`
+- `memory/.evolution/summary.json`
+
+Manual checks:
+
+- Open the daily memory file and confirm it includes both the main reply and the repeated failure lesson.
+- Open the generated skill draft and confirm it reads like a reusable workflow rather than a one-off task note.
+- Open the report and confirm the cycle, success, failure, and repeated-failure counts look plausible.
+- Open the generated rule proposal and sanity-check whether the promoted rule is specific enough to be useful.
+
+### Control UI evolution check
+
+Once the smoke passes, you can do a browser-level sanity check of the same loop.
+
+1. Start the gateway: `openclaw gateway run --dev --allow-unconfigured --auth none --force`
+2. Start the Control UI dev server: `pnpm ui:dev`
+3. Open the UI, send a normal chat turn, then switch to the **进化** tab.
+4. Click **Refresh** and confirm:
+
+- `Cycles` increases after the chat turn finishes.
+- `Latest Daily Memory` shows the recent lesson or summary.
+- `Latest 进化 Report` reflects the new totals.
+- Repeated failures and promoted rule proposals appear after replaying the same failure pattern.
 
 ## Contract tests (plugin and channel shape)
 

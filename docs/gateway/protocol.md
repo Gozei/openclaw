@@ -267,7 +267,9 @@ implemented in `src/gateway/server-methods/*.ts`.
 
 ### Models and usage
 
-- `models.list` returns the runtime-allowed model catalog.
+- `models.list` returns the runtime-allowed model catalog. Pass
+  `{ configuredOnly: true }` for UI picker surfaces that should prefer the
+  configured or allowlisted subset.
 - `usage.status` returns provider usage windows/remaining quota summaries.
 - `usage.cost` returns aggregated cost usage summaries for a date range.
 - `doctor.memory.status` returns vector-memory / embedding readiness for the

@@ -82,6 +82,7 @@ import {
   resolveConfiguredDreaming,
   updateDreamingEnabled,
 } from "./controllers/dreaming.ts";
+import { loadEvolutionStatus } from "./controllers/evolution.ts";
 import {
   loadExecApprovals,
   removeExecApprovalsFormValue,
@@ -161,6 +162,7 @@ const lazyAgents = createLazy(() => import("./views/agents.ts"));
 const lazyChannels = createLazy(() => import("./views/channels.ts"));
 const lazyCron = createLazy(() => import("./views/cron.ts"));
 const lazyDebug = createLazy(() => import("./views/debug.ts"));
+const lazyEvolution = createLazy(() => import("./views/evolution.ts"));
 const lazyInstances = createLazy(() => import("./views/instances.ts"));
 const lazyLogs = createLazy(() => import("./views/logs.ts"));
 const lazyNodes = createLazy(() => import("./views/nodes.ts"));
@@ -966,6 +968,7 @@ export function renderApp(state: AppViewState) {
                               <span class="nav-section__label-text"
                                 >${t(`nav.${group.label}`)}</span
                               >
+                              <span class="nav-section__label-meta">${group.tabs.length}</span>
                               <span class="nav-section__chevron"> ${icons.chevronDown} </span>
                             </button>
                           `
@@ -2073,6 +2076,16 @@ export function renderApp(state: AppViewState) {
               onRepairDreamingArtifacts: () => repairDreamingArtifacts(state),
               onRequestUpdate: requestHostUpdate,
             })
+          : nothing}
+        ${state.tab === "evolution"
+          ? lazyRender(lazyEvolution, (m) =>
+              m.renderEvolution({
+                loading: state.evolutionLoading,
+                error: state.evolutionError,
+                status: state.evolutionStatus,
+                onRefresh: () => loadEvolutionStatus(state),
+              }),
+            )
           : nothing}
       </main>
       ${renderExecApprovalPrompt(state)} ${renderGatewayUrlConfirmation(state)} ${nothing}

@@ -1,3 +1,4 @@
+import { buildEvolutionPreflight } from "../../evolution/preflight.js";
 import { ensureMcpLoopbackServer } from "../../gateway/mcp-http.js";
 import {
   createMcpLoopbackServerConfig,
@@ -106,7 +107,16 @@ export async function prepareCliRunContext(
     });
     authCredential = authStore.profiles[effectiveAuthProfileId];
   }
-  const extraSystemPrompt = params.extraSystemPrompt?.trim() ?? "";
+  const userExtraSystemPrompt = params.extraSystemPrompt?.trim() ?? "";
+  const evolutionPreflight = await buildEvolutionPreflight({
+    workspaceDir,
+    userPrompt: params.prompt,
+  });
+  const evolutionPreflightPrompt = evolutionPreflight?.prompt;
+  const extraSystemPrompt = [userExtraSystemPrompt, evolutionPreflightPrompt]
+    .filter((value) => value && value.trim())
+    .join("\n\n")
+    .trim();
   const extraSystemPromptHash = hashCliSessionText(extraSystemPrompt);
   const modelId = (params.model ?? "default").trim() || "default";
   const normalizedModel = normalizeCliModel(modelId, backendResolved.config);
@@ -330,5 +340,6 @@ export async function prepareCliRunContext(
     heartbeatPrompt,
     authEpoch,
     extraSystemPromptHash,
+    evolutionRecall: evolutionPreflight?.recall,
   };
 }

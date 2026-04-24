@@ -13,6 +13,11 @@
       "label": "Dreaming Frequency",
       "placeholder": "0 3 * * *",
       "help": "Optional cron cadence for the full dreaming sweep (light, REM, then deep)."
+    },
+    "dreaming.narrativeLanguage": {
+      "label": "Dream Diary Language",
+      "placeholder": "zh-CN",
+      "help": "Optional language for Dream Diary entries. Omit to auto-detect from the source material."
     }
   },
   "configSchema": {
@@ -28,6 +33,10 @@
           },
           "frequency": {
             "type": "string"
+          },
+          "narrativeLanguage": {
+            "type": "string",
+            "enum": ["en", "zh-CN"]
           },
           "timezone": {
             "type": "string"

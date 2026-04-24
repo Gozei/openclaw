@@ -838,8 +838,11 @@
   padding: 14px 16px;
   border: 1px solid var(--border-color);
   border-radius: 14px;
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--panel-2) 88%, transparent), var(--panel));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--panel-2) 88%, transparent),
+    var(--panel)
+  );
 }
 
 .config-summary-card__title {
@@ -926,8 +929,11 @@
   padding: 14px 16px;
   border: 1px solid color-mix(in srgb, var(--accent) 16%, var(--border-color));
   border-radius: 14px;
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--accent) 4%, var(--panel)), var(--panel));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent) 4%, var(--panel)),
+    var(--panel)
+  );
 }
 
 .config-task-guide__title {

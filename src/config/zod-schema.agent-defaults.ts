@@ -35,6 +35,23 @@ export const SilentReplyRewriteConfigSchema = z
   })
   .strict();
 
+const AgentEvolutionSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    reflectOnTaskComplete: z.boolean().optional(),
+    reflectOnSubagentComplete: z.boolean().optional(),
+    reflectOnHeartbeat: z.boolean().optional(),
+    autoPromoteDailyMemory: z.boolean().optional(),
+    autoPromoteMemory: z.boolean().optional(),
+    autoPromoteUserProfile: z.boolean().optional(),
+    autoPromoteRules: z.boolean().optional(),
+    autoPromoteSkills: z.boolean().optional(),
+    minRuleRepetition: z.number().int().min(1).max(20).optional(),
+    minSkillRepetition: z.number().int().min(1).max(20).optional(),
+  })
+  .strict()
+  .optional();
+
 export const AgentDefaultsSchema = z
   .object({
     /** Global default provider params applied to all models before per-model and per-agent overrides. */
@@ -106,6 +123,7 @@ export const AgentDefaultsSchema = z
     envelopeElapsed: z.union([z.literal("on"), z.literal("off")]).optional(),
     contextTokens: z.number().int().positive().optional(),
     cliBackends: z.record(z.string(), CliBackendSchema).optional(),
+    evolution: AgentEvolutionSchema,
     memorySearch: MemorySearchSchema,
     contextPruning: z
       .object({

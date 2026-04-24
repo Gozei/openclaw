@@ -106,6 +106,25 @@ vi.mock("../../config/sessions.js", async () => {
   };
 });
 
+vi.mock("../session-utils.js", () => ({
+  loadSessionEntry: (rawKey: string) => ({
+    cfg: {},
+    storePath: "/tmp/openclaw-send-test-sessions.json",
+    entry: undefined,
+    canonicalKey: rawKey.trim().toLowerCase(),
+  }),
+  resolveLoadedSessionAgentId: ({
+    sessionKey,
+  }: {
+    sessionKey: string;
+    cfg?: unknown;
+    entry?: unknown;
+  }) => {
+    const match = sessionKey.match(/^agent:([^:]+)/i);
+    return match?.[1]?.toLowerCase() ?? "main";
+  },
+}));
+
 async function loadFreshSendHandlersForTest() {
   vi.resetModules();
   ({ sendHandlers } = await import("./send.js"));

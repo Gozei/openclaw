@@ -42,6 +42,9 @@ const refreshQueuedFollowupSessionMock = vi.fn();
 const compactState = vi.hoisted(() => ({
   compactEmbeddedPiSessionMock: vi.fn(),
 }));
+const evolutionState = vi.hoisted(() => ({
+  maybeTriggerEvolutionForReplyRunMock: vi.fn(),
+}));
 
 vi.mock("../../agents/model-fallback.js", () => ({
   runWithModelFallback: (params: {
@@ -57,6 +60,11 @@ vi.mock("../../agents/model-fallback.js", () => ({
 
 vi.mock("../../agents/model-auth.js", () => ({
   resolveModelAuthMode: () => "api-key",
+}));
+
+vi.mock("../../evolution/auto.js", () => ({
+  maybeTriggerEvolutionForReplyRun: (...args: unknown[]) =>
+    evolutionState.maybeTriggerEvolutionForReplyRunMock(...args),
 }));
 
 vi.mock("../../agents/pi-embedded.js", () => {
@@ -173,6 +181,7 @@ afterEach(() => {
   clearMemoryPluginState();
   replyRunRegistryTesting.resetReplyRunRegistry();
   embeddedRunTesting.resetActiveEmbeddedRuns();
+  evolutionState.maybeTriggerEvolutionForReplyRunMock.mockReset();
 });
 
 describe("runReplyAgent auto-compaction token update", () => {
@@ -292,6 +301,83 @@ describe("runReplyAgent auto-compaction token update", () => {
 });
 
 describe("runReplyAgent block streaming", () => {
+  it("triggers evolution for final main-session replies", async () => {
+    runEmbeddedPiAgentMock.mockResolvedValue({
+      payloads: [{ text: "Target the failing lane first." }],
+      meta: {
+        agentMeta: {
+          usage: { input: 10, output: 5, total: 15 },
+        },
+      },
+    });
+
+    const typing = createMockTypingController();
+    const sessionCtx = {
+      Provider: "discord",
+      OriginatingTo: "channel:C1",
+      AccountId: "primary",
+      MessageSid: "msg",
+    } as unknown as TemplateContext;
+    const resolvedQueue = { mode: "interrupt" } as unknown as QueueSettings;
+    const followupRun = {
+      prompt: "Summarize the CI recovery plan",
+      summaryLine: "Summarize the CI recovery plan",
+      enqueuedAt: Date.now(),
+      run: {
+        agentId: "main",
+        sessionId: "session",
+        sessionKey: "main",
+        messageProvider: "discord",
+        sessionFile: "/tmp/session.jsonl",
+        workspaceDir: "/tmp",
+        config: {},
+        skillsSnapshot: {},
+        provider: "anthropic",
+        model: "claude",
+        thinkLevel: "low",
+        reasoningLevel: "on",
+        verboseLevel: "off",
+        elevatedLevel: "off",
+        bashElevated: {
+          enabled: false,
+          allowed: false,
+          defaultLevel: "off",
+        },
+        timeoutMs: 1_000,
+        blockReplyBreak: "message_end",
+      },
+    } as unknown as FollowupRun;
+
+    await runReplyAgent({
+      commandBody: "Summarize the CI recovery plan",
+      followupRun,
+      queueKey: "main",
+      resolvedQueue,
+      shouldSteer: false,
+      shouldFollowup: false,
+      isActive: false,
+      isStreaming: false,
+      typing,
+      sessionCtx,
+      defaultModel: "anthropic/claude-opus-4-6",
+      resolvedVerboseLevel: "off",
+      isNewSession: false,
+      blockStreamingEnabled: false,
+      resolvedBlockStreamingBreak: "message_end",
+      shouldInjectGroupIntro: false,
+      typingMode: "instant",
+    });
+
+    expect(evolutionState.maybeTriggerEvolutionForReplyRunMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentId: "main",
+        sessionKey: "main",
+        promptSummary: "Summarize the CI recovery plan",
+        isHeartbeat: false,
+      }),
+    );
+  });
+
   it("coalesces duplicate text_end block replies", async () => {
     const onBlockReply = vi.fn();
     runEmbeddedPiAgentMock.mockImplementationOnce(async (params) => {

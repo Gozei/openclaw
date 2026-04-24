@@ -1,4 +1,5 @@
 import type { CliSessionBinding, SessionSystemPromptReport } from "../../config/sessions/types.js";
+import type { EvolutionRecallTrace } from "../../evolution/preflight.js";
 import type { MessagingToolSend } from "../pi-embedded-messaging.types.js";
 
 export type EmbeddedPiAgentMeta = {
@@ -127,6 +128,7 @@ export type EmbeddedPiRunMeta = {
   toolSummary?: ToolSummaryTrace;
   completion?: CompletionTrace;
   contextManagement?: ContextManagementTrace;
+  evolutionRecall?: EvolutionRecallTrace;
 };
 
 export type EmbeddedPiRunResult = {

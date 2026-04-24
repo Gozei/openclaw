@@ -476,7 +476,7 @@ async function refreshChatModels(host: ChatHost) {
   }
   host.chatModelsLoading = true;
   try {
-    host.chatModelCatalog = await loadModels(host.client);
+    host.chatModelCatalog = await loadModels(host.client, { configuredOnly: true });
   } finally {
     host.chatModelsLoading = false;
   }

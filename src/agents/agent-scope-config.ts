@@ -3,6 +3,7 @@ import { resolveStateDir } from "../config/paths.js";
 import type {
   AgentContextLimitsConfig,
   AgentDefaultsConfig,
+  AgentEvolutionConfig,
 } from "../config/types.agent-defaults.js";
 import type { OpenClawConfig } from "../config/types.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
@@ -28,6 +29,7 @@ export type ResolvedAgentConfig = {
   humanDelay?: AgentEntry["humanDelay"];
   contextLimits?: AgentContextLimitsConfig;
   heartbeat?: AgentEntry["heartbeat"];
+  evolution?: AgentEvolutionConfig;
   identity?: AgentEntry["identity"];
   groupChat?: AgentEntry["groupChat"];
   subagents?: AgentEntry["subagents"];
@@ -125,6 +127,10 @@ export function resolveAgentConfig(
         ? { ...agentDefaults?.contextLimits, ...entry.contextLimits }
         : agentDefaults?.contextLimits,
     heartbeat: entry.heartbeat,
+    evolution:
+      typeof entry.evolution === "object" && entry.evolution
+        ? { ...agentDefaults?.evolution, ...entry.evolution }
+        : agentDefaults?.evolution,
     identity: entry.identity,
     groupChat: entry.groupChat,
     subagents: typeof entry.subagents === "object" && entry.subagents ? entry.subagents : undefined,

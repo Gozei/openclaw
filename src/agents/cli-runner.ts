@@ -54,6 +54,7 @@ export async function runPreparedCliAgent(
           ...(params.thinkLevel ? { thinking: params.thinkLevel } : {}),
           ...(context.effectiveAuthProfileId ? { authMode: "auth-profile" } : {}),
         },
+        evolutionRecall: context.evolutionRecall,
         completion: {
           finishReason: "stop",
           stopReason: "completed",

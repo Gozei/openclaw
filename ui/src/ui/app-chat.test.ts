@@ -15,9 +15,10 @@ vi.mock("./app-last-active-session.ts", () => ({
 let handleSendChat: typeof import("./app-chat.ts").handleSendChat;
 let refreshChatAvatar: typeof import("./app-chat.ts").refreshChatAvatar;
 let clearPendingQueueItemsForRun: typeof import("./app-chat.ts").clearPendingQueueItemsForRun;
+let refreshChat: typeof import("./app-chat.ts").refreshChat;
 
 async function loadChatHelpers(): Promise<void> {
-  ({ handleSendChat, refreshChatAvatar, clearPendingQueueItemsForRun } =
+  ({ handleSendChat, refreshChatAvatar, clearPendingQueueItemsForRun, refreshChat } =
     await import("./app-chat.ts"));
 }
 
@@ -175,6 +176,46 @@ describe("refreshChatAvatar", () => {
       "avatar/ops?meta=1",
       expect.objectContaining({ method: "GET" }),
     );
+  });
+});
+
+describe("refreshChat", () => {
+  beforeAll(async () => {
+    await loadChatHelpers();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("loads the configured-only model catalog for the chat picker", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      json: async () => ({}),
+    });
+    vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+    const request = vi.fn(async (method: string) => {
+      if (method === "chat.history") {
+        return { messages: [], thinkingLevel: null };
+      }
+      if (method === "sessions.list") {
+        return createSessionsResult([]);
+      }
+      if (method === "models.list") {
+        return { models: [] };
+      }
+      if (method === "commands.list") {
+        return { commands: [] };
+      }
+      throw new Error(`Unexpected request: ${method}`);
+    });
+    const host = makeHost({
+      client: { request } as unknown as ChatHost["client"],
+    });
+
+    await refreshChat(host, { scheduleScroll: false });
+
+    expect(request).toHaveBeenCalledWith("models.list", { configuredOnly: true });
   });
 });
 

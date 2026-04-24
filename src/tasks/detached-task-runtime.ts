@@ -1,3 +1,4 @@
+import { maybeTriggerEvolutionForTasks } from "../evolution/auto.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import type {
   DetachedTaskRecoveryAttemptParams,
@@ -90,13 +91,17 @@ export function recordTaskRunProgressByRunId(
 export function completeTaskRunByRunId(
   ...args: Parameters<DetachedTaskLifecycleRuntime["completeTaskRunByRunId"]>
 ): ReturnType<DetachedTaskLifecycleRuntime["completeTaskRunByRunId"]> {
-  return getDetachedTaskLifecycleRuntime().completeTaskRunByRunId(...args);
+  const result = getDetachedTaskLifecycleRuntime().completeTaskRunByRunId(...args);
+  maybeTriggerEvolutionForTasks(result);
+  return result;
 }
 
 export function failTaskRunByRunId(
   ...args: Parameters<DetachedTaskLifecycleRuntime["failTaskRunByRunId"]>
 ): ReturnType<DetachedTaskLifecycleRuntime["failTaskRunByRunId"]> {
-  return getDetachedTaskLifecycleRuntime().failTaskRunByRunId(...args);
+  const result = getDetachedTaskLifecycleRuntime().failTaskRunByRunId(...args);
+  maybeTriggerEvolutionForTasks(result);
+  return result;
 }
 
 export function setDetachedTaskDeliveryStatusByRunId(

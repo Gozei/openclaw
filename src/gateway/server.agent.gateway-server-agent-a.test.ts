@@ -288,7 +288,7 @@ describe("gateway server agent", () => {
     const res = await rpcReq(ws, "agent", {
       message: "hi",
       agentId: "ops",
-      sessionKey: "agent:main:main",
+      sessionKey: "agent:main:triage",
       idempotencyKey: "idem-agent-mismatch",
     });
     expect(res.ok).toBe(false);

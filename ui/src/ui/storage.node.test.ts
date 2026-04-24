@@ -2,6 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createStorageMock } from "../test-helpers/storage.ts";
 import { loadSettings, saveSettings } from "./storage.ts";
 
+const DEFAULT_NAV_GROUPS_COLLAPSED = {
+  chat: false,
+  control: false,
+  agent: true,
+  settings: true,
+};
+
 function setTestLocation(params: { protocol: string; host: string; pathname: string }) {
   vi.stubGlobal("location", {
     protocol: params.protocol,
@@ -129,7 +136,7 @@ describe("loadSettings default gateway URL derivation", () => {
       splitRatio: 0.6,
       navCollapsed: false,
       navWidth: 220,
-      navGroupsCollapsed: {},
+      navGroupsCollapsed: DEFAULT_NAV_GROUPS_COLLAPSED,
       borderRadius: 50,
       sessionsByGateway: {
         "wss://gateway.example:8443/openclaw": {
@@ -162,7 +169,7 @@ describe("loadSettings default gateway URL derivation", () => {
       splitRatio: 0.6,
       navCollapsed: false,
       navWidth: 220,
-      navGroupsCollapsed: {},
+      navGroupsCollapsed: DEFAULT_NAV_GROUPS_COLLAPSED,
       borderRadius: 50,
     });
 

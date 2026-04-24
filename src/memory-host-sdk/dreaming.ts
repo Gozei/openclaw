@@ -50,6 +50,7 @@ export type MemoryDreamingSpeed = "fast" | "balanced" | "slow";
 export type MemoryDreamingThinking = "low" | "medium" | "high";
 export type MemoryDreamingBudget = "cheap" | "medium" | "expensive";
 export type MemoryDreamingStorageMode = "inline" | "separate" | "both";
+export type MemoryDreamingNarrativeLanguage = "en" | "zh-CN";
 
 export type MemoryLightDreamingSource = "daily" | "sessions" | "recall";
 export type MemoryDeepDreamingSource = "daily" | "memory" | "sessions" | "logs" | "recall";
@@ -119,6 +120,7 @@ export type MemoryDreamingConfig = {
   enabled: boolean;
   frequency: string;
   timezone?: string;
+  narrativeLanguage?: MemoryDreamingNarrativeLanguage;
   verboseLogging: boolean;
   storage: MemoryDreamingStorageConfig;
   execution: {
@@ -255,6 +257,20 @@ function normalizeStorageMode(value: unknown): MemoryDreamingStorageMode {
   return DEFAULT_MEMORY_DREAMING_STORAGE_MODE;
 }
 
+function normalizeNarrativeLanguage(value: unknown): MemoryDreamingNarrativeLanguage | undefined {
+  const normalized = normalizeOptionalLowercaseString(value);
+  if (!normalized) {
+    return undefined;
+  }
+  if (normalized === "en" || normalized.startsWith("en-")) {
+    return "en";
+  }
+  if (normalized === "zh" || normalized.startsWith("zh-") || normalized === "zh_cn") {
+    return "zh-CN";
+  }
+  return undefined;
+}
+
 function normalizeSpeed(value: unknown): MemoryDreamingSpeed | undefined {
   const normalized = normalizeOptionalLowercaseString(value);
   if (normalized === "fast" || normalized === "balanced" || normalized === "slow") {
@@ -356,6 +372,7 @@ export function resolveMemoryDreamingConfig(params: {
     normalizeTrimmedString(dreaming?.timezone) ??
     normalizeTrimmedString(params.cfg?.agents?.defaults?.userTimezone) ??
     DEFAULT_MEMORY_DREAMING_TIMEZONE;
+  const narrativeLanguage = normalizeNarrativeLanguage(dreaming?.narrativeLanguage);
   const storage = asNullableRecord(dreaming?.storage);
   const execution = asNullableRecord(dreaming?.execution);
   const phases = asNullableRecord(dreaming?.phases);
@@ -376,6 +393,7 @@ export function resolveMemoryDreamingConfig(params: {
     enabled: normalizeBoolean(dreaming?.enabled, DEFAULT_MEMORY_DREAMING_ENABLED),
     frequency,
     ...(timezone ? { timezone } : {}),
+    ...(narrativeLanguage ? { narrativeLanguage } : {}),
     verboseLogging: normalizeBoolean(
       dreaming?.verboseLogging,
       DEFAULT_MEMORY_DREAMING_VERBOSE_LOGGING,
@@ -508,6 +526,7 @@ export function resolveMemoryDeepDreamingConfig(params: {
   cfg?: OpenClawConfig;
 }): MemoryDeepDreamingConfig & {
   timezone?: string;
+  narrativeLanguage?: MemoryDreamingNarrativeLanguage;
   verboseLogging: boolean;
   storage: MemoryDreamingStorageConfig;
 } {
@@ -516,6 +535,7 @@ export function resolveMemoryDeepDreamingConfig(params: {
     ...resolved.phases.deep,
     enabled: resolved.enabled && resolved.phases.deep.enabled,
     ...(resolved.timezone ? { timezone: resolved.timezone } : {}),
+    ...(resolved.narrativeLanguage ? { narrativeLanguage: resolved.narrativeLanguage } : {}),
     verboseLogging: resolved.verboseLogging,
     storage: resolved.storage,
   };
@@ -526,6 +546,7 @@ export function resolveMemoryLightDreamingConfig(params: {
   cfg?: OpenClawConfig;
 }): MemoryLightDreamingConfig & {
   timezone?: string;
+  narrativeLanguage?: MemoryDreamingNarrativeLanguage;
   verboseLogging: boolean;
   storage: MemoryDreamingStorageConfig;
 } {
@@ -534,6 +555,7 @@ export function resolveMemoryLightDreamingConfig(params: {
     ...resolved.phases.light,
     enabled: resolved.enabled && resolved.phases.light.enabled,
     ...(resolved.timezone ? { timezone: resolved.timezone } : {}),
+    ...(resolved.narrativeLanguage ? { narrativeLanguage: resolved.narrativeLanguage } : {}),
     verboseLogging: resolved.verboseLogging,
     storage: resolved.storage,
   };
@@ -544,6 +566,7 @@ export function resolveMemoryRemDreamingConfig(params: {
   cfg?: OpenClawConfig;
 }): MemoryRemDreamingConfig & {
   timezone?: string;
+  narrativeLanguage?: MemoryDreamingNarrativeLanguage;
   verboseLogging: boolean;
   storage: MemoryDreamingStorageConfig;
 } {
@@ -552,6 +575,7 @@ export function resolveMemoryRemDreamingConfig(params: {
     ...resolved.phases.rem,
     enabled: resolved.enabled && resolved.phases.rem.enabled,
     ...(resolved.timezone ? { timezone: resolved.timezone } : {}),
+    ...(resolved.narrativeLanguage ? { narrativeLanguage: resolved.narrativeLanguage } : {}),
     verboseLogging: resolved.verboseLogging,
     storage: resolved.storage,
   };

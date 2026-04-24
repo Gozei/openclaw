@@ -2,15 +2,17 @@ import { describe, expect, it } from "vitest";
 import { TAB_GROUPS, tabFromPath } from "./navigation.ts";
 
 describe("TAB_GROUPS", () => {
-  it("does not expose unfinished settings slices in the sidebar", () => {
+  it("keeps published settings slices grouped under settings", () => {
     const settings = TAB_GROUPS.find((group) => group.label === "settings");
     expect(settings?.tabs).toEqual([
+      "channels",
       "config",
       "communications",
-      "appearance",
       "automation",
       "infrastructure",
       "aiAgents",
+      "appearance",
+      "instances",
       "debug",
       "logs",
     ]);

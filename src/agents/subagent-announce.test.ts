@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createSubagentAnnounceDeliveryRuntimeMock } from "./subagent-announce.test-support.js";
 
 type AgentCallRequest = { method?: string; params?: Record<string, unknown> };
+const maybeTriggerEvolutionForEventMock = vi.fn();
 
 const agentSpy = vi.fn(async (_req: AgentCallRequest) => ({ runId: "run-main", status: "ok" }));
 const sessionsDeleteSpy = vi.fn((_req: AgentCallRequest) => undefined);
@@ -168,6 +169,9 @@ vi.mock("./subagent-announce-delivery.js", () => ({
 }));
 
 vi.mock("./subagent-announce.registry.runtime.js", () => subagentRegistryRuntimeMock);
+vi.mock("../evolution/auto.js", () => ({
+  maybeTriggerEvolutionForEvent: (...args: unknown[]) => maybeTriggerEvolutionForEventMock(...args),
+}));
 import { applySubagentWaitOutcome } from "./subagent-announce-output.js";
 import { runSubagentAnnounceFlow } from "./subagent-announce.js";
 
@@ -228,6 +232,7 @@ describe("subagent announce seam flow", () => {
     isEmbeddedPiRunActiveMock.mockReset().mockReturnValue(false);
     queueEmbeddedPiMessageMock.mockReset().mockReturnValue(false);
     waitForEmbeddedPiRunEndMock.mockReset().mockResolvedValue(true);
+    maybeTriggerEvolutionForEventMock.mockReset();
     mockConfig = {
       session: {
         mainKey: "main",
@@ -470,6 +475,37 @@ describe("subagent announce seam flow", () => {
         channel: "telegram",
         accountId: "bot:123",
         to: "-1001234567890",
+      }),
+    );
+  });
+
+  it("sends structured subagent evolution events after announce delivery", async () => {
+    const didAnnounce = await runSubagentAnnounceFlow({
+      childSessionKey: "agent:main:subagent:evolution",
+      childRunId: "run-subagent-evolution",
+      requesterSessionKey: "agent:main:main",
+      requesterDisplayKey: "main",
+      task: "triage the flaky test lane",
+      timeoutMs: 10,
+      cleanup: "keep",
+      waitForCompletion: false,
+      startedAt: 10,
+      endedAt: 20,
+      outcome: { status: "ok" },
+      roundOneReply: "Captured the failing shard and the minimal rerun command.",
+    });
+
+    expect(didAnnounce).toBe(true);
+    expect(maybeTriggerEvolutionForEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionKey: "agent:main:main",
+        event: expect.objectContaining({
+          source: "subagent",
+          subagentId: "agent:main:subagent:evolution",
+          taskId: "run-subagent-evolution",
+          succeeded: true,
+          outcomeSummary: "Captured the failing shard and the minimal rerun command.",
+        }),
       }),
     );
   });

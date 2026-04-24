@@ -151,6 +151,7 @@ openclaw evolve configure --no-auto-rollback
    ```
 
 4. **监控告警**: 配置失败通知
+
    ```bash
    openclaw cron add --job '{
      "name": "evolution-failure-alert",

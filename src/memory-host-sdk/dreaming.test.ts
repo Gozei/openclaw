@@ -28,6 +28,7 @@ describe("memory dreaming host helpers", () => {
           enabled: true,
           frequency: "0 */4 * * *",
           timezone: "Europe/London",
+          narrativeLanguage: "zh",
           storage: {
             mode: "both",
             separateReports: true,
@@ -49,6 +50,7 @@ describe("memory dreaming host helpers", () => {
     expect(resolved.enabled).toBe(true);
     expect(resolved.frequency).toBe("0 */4 * * *");
     expect(resolved.timezone).toBe("Europe/London");
+    expect(resolved.narrativeLanguage).toBe("zh-CN");
     expect(resolved.storage).toEqual({
       mode: "both",
       separateReports: true,
@@ -88,6 +90,14 @@ describe("memory dreaming host helpers", () => {
       recencyHalfLifeDays: 14,
       maxAgeDays: 30,
     });
+  });
+
+  it("leaves narrative language unset when omitted so runtime can auto-detect", () => {
+    const resolved = resolveMemoryDreamingConfig({
+      pluginConfig: {},
+    });
+
+    expect(resolved.narrativeLanguage).toBeUndefined();
   });
 
   it("defaults storage mode to separate so phase blocks do not pollute daily memory files", () => {

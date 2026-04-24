@@ -8,6 +8,7 @@ import { createReplyPrefixContext } from "../../channels/reply-prefix.js";
 import { createOutboundSendDeps, type CliDeps } from "../../cli/outbound-send-deps.js";
 import type { SessionEntry } from "../../config/sessions.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
+import { buildEvolutionRecallNotice } from "../../evolution/preflight.js";
 import {
   resolveAgentDeliveryPlan,
   resolveAgentOutboundTarget,
@@ -67,6 +68,29 @@ function logNestedOutput(
     }
     runtime.log(`${prefix} ${line}`);
   }
+}
+
+function prependLocalEvolutionRecallPayloads(params: {
+  deliver: boolean;
+  deliveryChannel?: string;
+  payloads: ReplyPayload[];
+  result: RunResult;
+}): ReplyPayload[] {
+  if (params.payloads.length === 0) {
+    return params.payloads;
+  }
+  if (
+    params.deliver &&
+    params.deliveryChannel &&
+    !isInternalMessageChannel(params.deliveryChannel)
+  ) {
+    return params.payloads;
+  }
+  const notice = buildEvolutionRecallNotice(params.result.meta.evolutionRecall);
+  if (!notice) {
+    return params.payloads;
+  }
+  return [{ text: notice }, ...params.payloads];
 }
 
 async function normalizeReplyMediaPathsForDelivery(params: {
@@ -293,11 +317,17 @@ export async function deliverAgentCommandResult(params: {
     }
   }
 
+  const previewPayloads = prependLocalEvolutionRecallPayloads({
+    deliver,
+    deliveryChannel,
+    payloads: (payloads ?? []) as ReplyPayload[],
+    result,
+  });
   const normalizedReplyPayloads = normalizeAgentCommandReplyPayloads({
     cfg,
     opts,
     outboundSession,
-    payloads,
+    payloads: previewPayloads,
     result,
     deliveryChannel,
     accountId: resolvedAccountId,

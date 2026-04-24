@@ -90,6 +90,19 @@ function buildBase64ImageUrl(params: { data: string; mediaType?: string }): stri
     : `data:${params.mediaType ?? "image/png"};base64,${params.data}`;
 }
 
+function isRenderableImageSource(params: { url?: string; mediaType?: string }): boolean {
+  if (typeof params.mediaType === "string" && params.mediaType.trim()) {
+    return params.mediaType.trim().toLowerCase().startsWith("image/");
+  }
+  if (typeof params.url !== "string" || !params.url.trim()) {
+    return false;
+  }
+  if (params.url.startsWith("data:")) {
+    return /^data:image\//i.test(params.url);
+  }
+  return true;
+}
+
 function getFileExtension(url: string): string | undefined {
   const source = (() => {
     try {
@@ -146,41 +159,55 @@ function extractImages(message: unknown): ImageBlock[] {
         // Handle source object format (from sendChatMessage)
         const source = b.source as Record<string, unknown> | undefined;
         if (source?.type === "base64" && typeof source.data === "string") {
-          appendImageBlock(images, {
-            url: buildBase64ImageUrl({
-              data: source.data,
-              mediaType: typeof source.media_type === "string" ? source.media_type : undefined,
-            }),
+          const mediaType = typeof source.media_type === "string" ? source.media_type : undefined;
+          const url = buildBase64ImageUrl({
+            data: source.data,
+            mediaType,
           });
+          if (isRenderableImageSource({ url, mediaType })) {
+            appendImageBlock(images, { url });
+          }
         } else if (typeof b.url === "string") {
-          appendImageBlock(images, { url: b.url });
+          if (isRenderableImageSource({ url: b.url })) {
+            appendImageBlock(images, { url: b.url });
+          }
         }
       } else if (b.type === "image_url") {
         // OpenAI format
         const imageUrl = b.image_url as Record<string, unknown> | undefined;
         if (typeof imageUrl?.url === "string") {
-          appendImageBlock(images, { url: imageUrl.url });
+          if (isRenderableImageSource({ url: imageUrl.url })) {
+            appendImageBlock(images, { url: imageUrl.url });
+          }
         }
       } else if (b.type === "input_image") {
         const imageUrl = b.image_url;
         if (typeof imageUrl === "string") {
-          appendImageBlock(images, { url: imageUrl });
+          if (isRenderableImageSource({ url: imageUrl })) {
+            appendImageBlock(images, { url: imageUrl });
+          }
         } else if (imageUrl && typeof imageUrl === "object") {
           const url = (imageUrl as Record<string, unknown>).url;
           if (typeof url === "string") {
-            appendImageBlock(images, { url });
+            if (isRenderableImageSource({ url })) {
+              appendImageBlock(images, { url });
+            }
           }
         }
         const source = b.source as Record<string, unknown> | undefined;
         if (typeof source?.url === "string") {
-          appendImageBlock(images, { url: source.url });
+          if (isRenderableImageSource({ url: source.url })) {
+            appendImageBlock(images, { url: source.url });
+          }
         } else if (typeof source?.data === "string") {
-          appendImageBlock(images, {
-            url: buildBase64ImageUrl({
-              data: source.data,
-              mediaType: typeof source.media_type === "string" ? source.media_type : undefined,
-            }),
+          const mediaType = typeof source.media_type === "string" ? source.media_type : undefined;
+          const url = buildBase64ImageUrl({
+            data: source.data,
+            mediaType,
           });
+          if (isRenderableImageSource({ url, mediaType })) {
+            appendImageBlock(images, { url });
+          }
         }
       }
     }

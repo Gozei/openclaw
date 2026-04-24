@@ -6,18 +6,20 @@ export const TAB_GROUPS = [
   { label: "chat", tabs: ["chat"] },
   {
     label: "control",
-    tabs: ["overview", "channels", "instances", "sessions", "usage", "cron"],
+    tabs: ["overview", "sessions", "usage", "cron"],
   },
-  { label: "agent", tabs: ["agents", "skills", "nodes", "dreams"] },
+  { label: "agent", tabs: ["agents", "skills", "evolution", "dreams", "nodes"] },
   {
     label: "settings",
     tabs: [
+      "channels",
       "config",
       "communications",
-      "appearance",
       "automation",
       "infrastructure",
       "aiAgents",
+      "appearance",
+      "instances",
       "debug",
       "logs",
     ],
@@ -43,7 +45,8 @@ export type Tab =
   | "aiAgents"
   | "debug"
   | "logs"
-  | "dreams";
+  | "dreams"
+  | "evolution";
 
 const TAB_PATHS: Record<Tab, string> = {
   agents: "/agents",
@@ -65,6 +68,7 @@ const TAB_PATHS: Record<Tab, string> = {
   debug: "/debug",
   logs: "/logs",
   dreams: "/dreaming",
+  evolution: "/evolution",
 };
 
 const PATH_ALIASES: Record<string, Tab> = {
@@ -195,6 +199,8 @@ export function iconForTab(tab: Tab): IconName {
       return "scrollText";
     case "dreams":
       return "moon";
+    case "evolution":
+      return "spark";
     default:
       return "folder";
   }

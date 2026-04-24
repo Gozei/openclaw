@@ -98,6 +98,7 @@ export type ShortTermPromotionDreamingConfig = {
   enabled: boolean;
   cron: string;
   timezone?: string;
+  narrativeLanguage?: "en" | "zh-CN";
   limit: number;
   minScore: number;
   minRecallCount: number;
@@ -384,6 +385,7 @@ export function resolveShortTermPromotionDreamingConfig(params: {
     enabled: resolved.enabled,
     cron: resolved.cron,
     ...(resolved.timezone ? { timezone: resolved.timezone } : {}),
+    ...(resolved.narrativeLanguage ? { narrativeLanguage: resolved.narrativeLanguage } : {}),
     limit: resolved.limit,
     minScore: resolved.minScore,
     minRecallCount: resolved.minRecallCount,
@@ -629,6 +631,7 @@ export async function runShortTermDreamingPromotionIfTriggered(params: {
           workspaceDir,
           data,
           nowMs: sweepNowMs,
+          language: params.config.narrativeLanguage,
           timezone: params.config.timezone,
           logger: params.logger,
         });
