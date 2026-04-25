@@ -351,6 +351,11 @@ openclaw config set gateway.reload.mode hybrid
 openclaw config validate
 ```
 
+When a write would require a Gateway restart or component/channel restart,
+interactive terminals ask for confirmation before committing the change.
+Non-interactive runs must pass `--yes` to confirm the restart impact. Pure hot
+reload and no-op changes are reported without an extra prompt.
+
 If a write is rejected, inspect the saved payload and fix the full config shape:
 
 ```bash

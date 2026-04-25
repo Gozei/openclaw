@@ -56,6 +56,7 @@ import {
 } from "./config-set-input.js";
 import { resolveConfigSetMode } from "./config-set-parser.js";
 import { setCommandJsonMode } from "./program/json-mode.js";
+import { promptYesNo } from "./prompt.js";
 
 type PathSegment = string;
 type ConfigSetParseOpts = {
@@ -103,6 +104,14 @@ class ConfigSetDryRunValidationError extends Error {
     this.name = "ConfigSetDryRunValidationError";
   }
 }
+
+type ConfigReloadPlanPreview = {
+  effect: "none" | "hot" | "component-restart" | "gateway-restart";
+  requiresRestart: boolean;
+  requiresGatewayRestart: boolean;
+  restartReasons: string[];
+  restartChannels: string[];
+};
 
 function isIndexSegment(raw: string): boolean {
   return /^[0-9]+$/.test(raw);
@@ -666,6 +675,80 @@ function buildValueAssignmentOperation(params: {
   };
 }
 
+async function previewConfigReloadPlan(params: {
+  operations: ReadonlyArray<ConfigSetOperation>;
+  nextConfig: OpenClawConfig;
+}): Promise<ConfigReloadPlanPreview> {
+  const { buildGatewayReloadPlan } = await import("../gateway/config-reload-plan.js");
+  const changedPaths = params.operations.map((operation) => toDotPath(operation.setPath));
+  const plan = buildGatewayReloadPlan(changedPaths);
+  const mode = params.nextConfig.gateway?.reload?.mode ?? "hybrid";
+  const requiresGatewayRestart =
+    changedPaths.length > 0 && (mode === "off" || mode === "restart" || plan.restartGateway);
+  const restartChannels = Array.from(plan.restartChannels).toSorted();
+  const hasComponentRestart =
+    plan.reloadHooks ||
+    plan.restartGmailWatcher ||
+    plan.restartCron ||
+    plan.restartHeartbeat ||
+    plan.restartHealthMonitor ||
+    restartChannels.length > 0;
+  const effect = requiresGatewayRestart
+    ? "gateway-restart"
+    : hasComponentRestart
+      ? "component-restart"
+      : plan.hotReasons.length > 0
+        ? "hot"
+        : "none";
+  return {
+    effect,
+    requiresRestart: requiresGatewayRestart || hasComponentRestart,
+    requiresGatewayRestart,
+    restartReasons:
+      mode === "restart" && changedPaths.length > 0 ? changedPaths : plan.restartReasons,
+    restartChannels,
+  };
+}
+
+function formatConfigReloadImpact(plan: ConfigReloadPlanPreview): string {
+  switch (plan.effect) {
+    case "gateway-restart":
+      return `This change requires a Gateway restart${
+        plan.restartReasons.length > 0 ? ` (${plan.restartReasons.join(", ")})` : ""
+      }.`;
+    case "component-restart":
+      return plan.restartChannels.length > 0
+        ? `This change will reconnect channel runtime(s): ${plan.restartChannels.join(", ")}.`
+        : "This change will restart a Gateway component.";
+    case "hot":
+      return "This change hot-reloads without a Gateway restart.";
+    case "none":
+      return "This change is read dynamically and does not require a restart.";
+  }
+  return "This change has an unknown reload impact.";
+}
+
+async function confirmConfigWriteIfRestartRequired(params: {
+  plan: ConfigReloadPlanPreview;
+  opts: ConfigSetOptions;
+  runtime: RuntimeEnv;
+}) {
+  params.runtime.log(info(formatConfigReloadImpact(params.plan)));
+  if (!params.plan.requiresRestart) {
+    return;
+  }
+  if (params.opts.yes) {
+    return;
+  }
+  if (!process.stdin.isTTY) {
+    throw new Error("Config change requires a restart operation; re-run with --yes to confirm.");
+  }
+  const ok = await promptYesNo("Apply config change and allow the restart operation?", false);
+  if (!ok) {
+    throw new Error("Config change canceled; restart operation was not confirmed.");
+  }
+}
+
 function parseBatchOperations(entries: ConfigSetBatchEntry[]): ConfigSetOperation[] {
   const operations: ConfigSetOperation[] = [];
   for (const [index, entry] of entries.entries()) {
@@ -1144,6 +1227,13 @@ export async function runConfigSet(opts: {
       throw new Error(formatUnsupportedSecretRefPolicyFailureMessage(policyIssueLines));
     }
 
+    const reloadPlan = await previewConfigReloadPlan({ operations, nextConfig });
+    await confirmConfigWriteIfRestartRequired({
+      plan: reloadPlan,
+      opts: opts.cliOptions,
+      runtime,
+    });
+
     await replaceConfigFile({
       nextConfig: next,
       ...(snapshot.hash !== undefined ? { baseHash: snapshot.hash } : {}),
@@ -1158,12 +1248,14 @@ export async function runConfigSet(opts: {
     if (operations.length === 1) {
       runtime.log(
         info(
-          `Updated ${toDotPath(operations[0]?.requestedPath ?? [])}. Restart the gateway to apply.`,
+          `Updated ${toDotPath(operations[0]?.requestedPath ?? [])}. ${formatConfigReloadImpact(reloadPlan)}`,
         ),
       );
       return;
     }
-    runtime.log(info(`Updated ${operations.length} config paths. Restart the gateway to apply.`));
+    runtime.log(
+      info(`Updated ${operations.length} config paths. ${formatConfigReloadImpact(reloadPlan)}`),
+    );
   } catch (err) {
     if (
       opts.cliOptions.dryRun &&
@@ -1370,6 +1462,7 @@ export function registerConfigCli(program: Command) {
       "Dry-run only: allow exec SecretRef resolvability checks (may execute provider commands)",
       false,
     )
+    .option("--yes", "Confirm Gateway restart impact without prompting", false)
     .option("--ref-provider <alias>", "SecretRef builder: provider alias")
     .option("--ref-source <source>", "SecretRef builder: source (env|file|exec)")
     .option("--ref-id <id>", "SecretRef builder: ref id")

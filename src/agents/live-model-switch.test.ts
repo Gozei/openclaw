@@ -474,6 +474,69 @@ describe("live model switch", () => {
       expect(sessionEntry).not.toHaveProperty("liveModelSwitchPending");
     });
 
+    it("ignores stale runtime model fields when clearing a pending switch to the current default", async () => {
+      state.resolveDefaultModelForAgentMock.mockReturnValue({
+        provider: "openai-codex",
+        model: "gpt-5.4-mini",
+      });
+      const sessionEntry = {
+        liveModelSwitchPending: true,
+        modelProvider: "custom-custom27",
+        model: "qwen3.5-turbo",
+      };
+      state.loadSessionStoreMock.mockReturnValue({ main: sessionEntry });
+      state.updateSessionStoreMock.mockImplementation(
+        async (_path: string, updater: (store: Record<string, unknown>) => void) => {
+          const store: Record<string, typeof sessionEntry> = { main: sessionEntry };
+          updater(store);
+        },
+      );
+
+      const { shouldSwitchToLiveModel } = await loadModule();
+
+      const result = shouldSwitchToLiveModel(
+        makeShouldSwitchParams({
+          defaultProvider: "openai-codex",
+          defaultModel: "gpt-5.4-mini",
+          currentProvider: "openai-codex",
+          currentModel: "gpt-5.4-mini",
+        }),
+      );
+
+      expect(result).toBeUndefined();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(state.updateSessionStoreMock).toHaveBeenCalledTimes(1);
+      expect(sessionEntry).not.toHaveProperty("liveModelSwitchPending");
+    });
+
+    it("switches to an explicit override even when runtime fields are stale", async () => {
+      state.loadSessionStoreMock.mockReturnValue({
+        main: {
+          liveModelSwitchPending: true,
+          providerOverride: "openai-codex",
+          modelOverride: "gpt-5.4-mini",
+          modelProvider: "custom-custom27",
+          model: "qwen3.5-turbo",
+        },
+      });
+
+      const { shouldSwitchToLiveModel } = await loadModule();
+
+      const result = shouldSwitchToLiveModel(
+        makeShouldSwitchParams({
+          currentProvider: "custom-custom27",
+          currentModel: "qwen3.5-turbo",
+        }),
+      );
+
+      expect(result).toEqual({
+        provider: "openai-codex",
+        model: "gpt-5.4-mini",
+        authProfileId: undefined,
+        authProfileIdSource: undefined,
+      });
+    });
+
     it("returns undefined when sessionKey is missing", async () => {
       const { shouldSwitchToLiveModel } = await loadModule();
 

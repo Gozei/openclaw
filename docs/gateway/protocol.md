@@ -319,9 +319,14 @@ implemented in `src/gateway/server-methods/*.ts`.
 - `secrets.resolve` resolves command-target secret assignments for a specific
   command/target set.
 - `config.get` returns the current config snapshot and hash.
-- `config.set` writes a validated config payload.
-- `config.patch` merges a partial config update.
-- `config.apply` validates + replaces the full config payload.
+- `config.set` writes a validated config payload. It supports the same `dryRun`
+  and `restartPolicy` controls as `config.patch`.
+- `config.patch` merges a partial config update. Pass `dryRun: true` to validate
+  and preview the reload plan without writing; pass
+  `restartPolicy: "confirm-required"` to reject changes that require a Gateway,
+  channel, or component restart until the caller has explicit user confirmation.
+- `config.apply` validates + replaces the full config payload. It supports the
+  same `dryRun` and `restartPolicy` controls as `config.patch`.
 - `config.schema` returns the live config schema payload used by Control UI and
   CLI tooling: schema, `uiHints`, version, and generation metadata, including
   plugin + channel schema metadata when the runtime can load it. The schema

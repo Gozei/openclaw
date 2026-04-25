@@ -36,6 +36,56 @@ export type ConfigState = {
   lastError: string | null;
 };
 
+type ConfigReloadPlan = {
+  effect?: string;
+  requiresRestart?: boolean;
+  requiresGatewayRestart?: boolean;
+  restartReasons?: string[];
+  actions?: {
+    restartChannels?: string[];
+  };
+};
+
+function isConfigReloadPlan(value: unknown): value is ConfigReloadPlan {
+  return typeof value === "object" && value !== null;
+}
+
+function reloadPlanNeedsConfirmation(plan: ConfigReloadPlan): boolean {
+  return (
+    plan.requiresRestart === true ||
+    plan.requiresGatewayRestart === true ||
+    plan.effect === "component-restart" ||
+    plan.effect === "gateway-restart"
+  );
+}
+
+function formatReloadPlanForConfirmation(plan: ConfigReloadPlan): string {
+  const reasons = Array.isArray(plan.restartReasons)
+    ? plan.restartReasons.filter((reason): reason is string => typeof reason === "string")
+    : [];
+  const channels = Array.isArray(plan.actions?.restartChannels)
+    ? plan.actions.restartChannels.filter(
+        (channel): channel is string => typeof channel === "string",
+      )
+    : [];
+  const details = [
+    reasons.length > 0 ? `Restart-triggering changes: ${reasons.join(", ")}` : null,
+    channels.length > 0 ? `Channels affected: ${channels.join(", ")}` : null,
+  ].filter((line): line is string => Boolean(line));
+  const headline =
+    plan.requiresGatewayRestart === true || plan.effect === "gateway-restart"
+      ? "This config change requires a full Gateway restart. Current Gateway connections will disconnect and reconnect."
+      : "This config change requires restarting one or more Gateway components. Affected connections may reconnect.";
+  return [headline, ...details, "Apply this change and allow the restart operation?"].join("\n\n");
+}
+
+function confirmGatewayRestart(plan: ConfigReloadPlan): boolean {
+  if (typeof globalThis.confirm !== "function") {
+    return false;
+  }
+  return globalThis.confirm(formatReloadPlanForConfirmation(plan));
+}
+
 export async function loadConfig(state: ConfigState) {
   if (!state.client || !state.connected) {
     return;
@@ -155,7 +205,27 @@ async function submitConfigChange(
       state.lastError = "Config hash missing; reload and retry.";
       return;
     }
-    await state.client.request(method, { raw, baseHash, ...extraParams });
+    const preview = await state.client.request<{ reloadPlan?: unknown }>(method, {
+      raw,
+      baseHash,
+      dryRun: true,
+      ...extraParams,
+    });
+    const reloadPlan = isConfigReloadPlan(preview.reloadPlan) ? preview.reloadPlan : null;
+    const needsRestartConfirmation =
+      reloadPlan !== null ? reloadPlanNeedsConfirmation(reloadPlan) : false;
+    const restartConfirmed =
+      needsRestartConfirmation && reloadPlan !== null ? confirmGatewayRestart(reloadPlan) : false;
+    if (needsRestartConfirmation && !restartConfirmed) {
+      state.lastError = "Config change canceled; restart operation was not confirmed.";
+      return;
+    }
+    await state.client.request(method, {
+      raw,
+      baseHash,
+      restartPolicy: restartConfirmed ? "auto" : "confirm-required",
+      ...extraParams,
+    });
     state.configFormDirty = false;
     await loadConfig(state);
   } catch (err) {

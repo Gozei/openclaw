@@ -381,6 +381,7 @@ describe("saveAgentsConfig", () => {
     const { state, request } = createSaveState();
     state.agentsSelectedId = "kimi";
     request
+      .mockImplementationOnce(async () => ({ reloadPlan: { effect: "hot" } }))
       .mockImplementationOnce(async () => undefined)
       .mockImplementationOnce(async () => {
         state.agentsSelectedId = null;
@@ -414,13 +415,18 @@ describe("saveAgentsConfig", () => {
     expect(request).toHaveBeenNthCalledWith(
       1,
       "config.set",
-      expect.objectContaining({ baseHash: "hash-1" }),
+      expect.objectContaining({ baseHash: "hash-1", dryRun: true }),
     );
     expect(JSON.parse(request.mock.calls[0]?.[1]?.raw as string)).toEqual({
       agents: { list: [{ id: "main" }] },
     });
-    expect(request).toHaveBeenNthCalledWith(2, "config.get", {});
-    expect(request).toHaveBeenNthCalledWith(3, "agents.list", {});
+    expect(request).toHaveBeenNthCalledWith(
+      2,
+      "config.set",
+      expect.objectContaining({ baseHash: "hash-1", restartPolicy: "confirm-required" }),
+    );
+    expect(request).toHaveBeenNthCalledWith(3, "config.get", {});
+    expect(request).toHaveBeenNthCalledWith(4, "agents.list", {});
     expect(state.agentsSelectedId).toBe("kimi");
   });
 
@@ -428,6 +434,7 @@ describe("saveAgentsConfig", () => {
     const { state, request } = createSaveState();
     state.agentsSelectedId = "kimi";
     request
+      .mockResolvedValueOnce({ reloadPlan: { effect: "hot" } })
       .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce({
         hash: "hash-2",

@@ -557,7 +557,7 @@ Most fields hot-apply without downtime. In `hybrid` mode, restart-required chang
 ## Config RPC (programmatic updates)
 
 <Note>
-Control-plane write RPCs (`config.apply`, `config.patch`, `update.run`) are rate-limited to **3 requests per 60 seconds** per `deviceId+clientIp`. When limited, the RPC returns `UNAVAILABLE` with `retryAfterMs`.
+Control-plane write RPCs (`config.set`, `config.apply`, `config.patch`, `update.run`) are rate-limited to **3 requests per 60 seconds** per `deviceId+clientIp`. When limited, the RPC returns `UNAVAILABLE` with `retryAfterMs`.
 </Note>
 
 Safe/default flow:
@@ -565,6 +565,7 @@ Safe/default flow:
 - `config.schema.lookup`: inspect one path-scoped config subtree with a shallow
   schema node, matched hint metadata, and immediate child summaries
 - `config.get`: fetch the current snapshot + hash
+- `config.set`: validated full-config write
 - `config.patch`: preferred partial update path
 - `config.apply`: full-config replacement only
 - `update.run`: explicit self-update + restart
@@ -584,11 +585,13 @@ then `config.patch`.
 
     - `raw` (string) — JSON5 payload for the entire config
     - `baseHash` (optional) — config hash from `config.get` (required when config exists)
+    - `dryRun` (optional boolean) — validate and return the reload plan without writing config
+    - `restartPolicy` (optional) — set `"confirm-required"` to reject restart-impacting changes until the caller has explicit user confirmation
     - `sessionKey` (optional) — session key for the post-restart wake-up ping
     - `note` (optional) — note for the restart sentinel
     - `restartDelayMs` (optional) — delay before restart (default 2000)
 
-    Restart requests are coalesced while one is already pending/in-flight, and a 30-second cooldown applies between restart cycles.
+    The response includes `reloadPlan` so clients can distinguish hot reloads, channel/component restarts, and full Gateway restarts. `reloadPlan.requiresRestart` covers any restart-impacting change; `reloadPlan.requiresGatewayRestart` is true only for full Gateway restarts. Restart requests are coalesced while one is already pending/in-flight, and a 30-second cooldown applies between restart cycles.
 
     ```bash
     openclaw gateway call config.get --params '{}'  # capture payload.hash
@@ -612,9 +615,11 @@ then `config.patch`.
 
     - `raw` (string) — JSON5 with just the keys to change
     - `baseHash` (required) — config hash from `config.get`
+    - `dryRun` (optional boolean) — validate and return the reload plan without writing config
+    - `restartPolicy` (optional) — set `"confirm-required"` to reject restart-impacting changes until the caller has explicit user confirmation
     - `sessionKey`, `note`, `restartDelayMs` — same as `config.apply`
 
-    Restart behavior matches `config.apply`: coalesced pending restarts plus a 30-second cooldown between restart cycles.
+    The response includes `reloadPlan` so clients can distinguish hot reloads, channel/component restarts, and full Gateway restarts. `reloadPlan.requiresRestart` covers any restart-impacting change; `reloadPlan.requiresGatewayRestart` is true only for full Gateway restarts. Restart behavior matches `config.apply`: coalesced pending restarts plus a 30-second cooldown between restart cycles.
 
     ```bash
     openclaw gateway call config.patch --params '{

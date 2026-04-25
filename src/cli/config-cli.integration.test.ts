@@ -179,6 +179,7 @@ describe("config cli integration", () => {
       await runConfigSet({
         cliOptions: {
           batchFile: batchPath,
+          yes: true,
         },
         runtime: runtime.runtime,
       });

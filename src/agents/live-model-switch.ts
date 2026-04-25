@@ -22,6 +22,7 @@ export function resolveLiveSessionModelSelection(params: {
   agentId?: string;
   defaultProvider: string;
   defaultModel: string;
+  includeRuntimeModel?: boolean;
 }): LiveSessionModelSelection | null {
   const sessionKey = normalizeOptionalString(params.sessionKey);
   const cfg = params.cfg;
@@ -45,8 +46,8 @@ export function resolveLiveSessionModelSelection(params: {
   });
   const persisted = resolvePersistedSelectedModelRef({
     defaultProvider: defaultModelRef.provider,
-    runtimeProvider: entry?.modelProvider,
-    runtimeModel: entry?.model,
+    runtimeProvider: params.includeRuntimeModel === false ? undefined : entry?.modelProvider,
+    runtimeModel: params.includeRuntimeModel === false ? undefined : entry?.model,
     overrideProvider: normalizedSelection.providerOverride,
     overrideModel: normalizedSelection.modelOverride,
   });
@@ -170,6 +171,7 @@ export function shouldSwitchToLiveModel(params: {
     agentId: params.agentId,
     defaultProvider: params.defaultProvider,
     defaultModel: params.defaultModel,
+    includeRuntimeModel: false,
   });
   if (
     !hasDifferentLiveSessionModelSelection(

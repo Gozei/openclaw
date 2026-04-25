@@ -90,6 +90,39 @@ describe("config shared auth disconnects", () => {
     expect(scheduleGatewaySigusr1RestartMock).not.toHaveBeenCalled();
   });
 
+  it("rejects config.set when a gateway restart needs explicit confirmation", async () => {
+    readConfigFileSnapshotForWriteMock.mockResolvedValue(createConfigWriteSnapshot({}));
+
+    const { options, respond } = createConfigHandlerHarness({
+      method: "config.set",
+      params: {
+        baseHash: "base-hash",
+        raw: JSON.stringify({ gateway: { port: 19001 } }),
+        restartPolicy: "confirm-required",
+      },
+    });
+
+    await configHandlers["config.set"](options);
+
+    expect(writeConfigFileMock).not.toHaveBeenCalled();
+    expect(scheduleGatewaySigusr1RestartMock).not.toHaveBeenCalled();
+    expect(respond).toHaveBeenCalledWith(
+      false,
+      undefined,
+      expect.objectContaining({
+        code: "INVALID_REQUEST",
+        message: expect.stringContaining("requires restart"),
+        details: {
+          reloadPlan: expect.objectContaining({
+            effect: "gateway-restart",
+            requiresRestart: true,
+            requiresGatewayRestart: true,
+          }),
+        },
+      }),
+    );
+  });
+
   it("lets the config reloader own hybrid-mode auth restarts", async () => {
     const prevConfig: OpenClawConfig = {
       gateway: {
@@ -167,5 +200,105 @@ describe("config shared auth disconnects", () => {
     await flushConfigHandlerMicrotasks();
 
     expect(scheduleGatewaySigusr1RestartMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("previews restart impact for config.patch dry runs without writing config", async () => {
+    readConfigFileSnapshotForWriteMock.mockResolvedValue(createConfigWriteSnapshot({}));
+
+    const { options, respond } = createConfigHandlerHarness({
+      method: "config.patch",
+      params: {
+        baseHash: "base-hash",
+        raw: JSON.stringify({ gateway: { port: 19001 } }),
+        dryRun: true,
+      },
+    });
+
+    await configHandlers["config.patch"](options);
+
+    expect(writeConfigFileMock).not.toHaveBeenCalled();
+    expect(scheduleGatewaySigusr1RestartMock).not.toHaveBeenCalled();
+    expect(respond).toHaveBeenCalledWith(
+      true,
+      expect.objectContaining({
+        ok: true,
+        dryRun: true,
+        reloadPlan: expect.objectContaining({
+          effect: "gateway-restart",
+          requiresRestart: true,
+          requiresGatewayRestart: true,
+          restartReasons: expect.arrayContaining(["gateway"]),
+        }),
+      }),
+      undefined,
+    );
+  });
+
+  it("rejects config.patch when a gateway restart needs explicit confirmation", async () => {
+    readConfigFileSnapshotForWriteMock.mockResolvedValue(createConfigWriteSnapshot({}));
+
+    const { options, respond } = createConfigHandlerHarness({
+      method: "config.patch",
+      params: {
+        baseHash: "base-hash",
+        raw: JSON.stringify({ gateway: { port: 19001 } }),
+        restartPolicy: "confirm-required",
+      },
+    });
+
+    await configHandlers["config.patch"](options);
+
+    expect(writeConfigFileMock).not.toHaveBeenCalled();
+    expect(scheduleGatewaySigusr1RestartMock).not.toHaveBeenCalled();
+    expect(respond).toHaveBeenCalledWith(
+      false,
+      undefined,
+      expect.objectContaining({
+        code: "INVALID_REQUEST",
+        message: expect.stringContaining("requires restart"),
+        details: {
+          reloadPlan: expect.objectContaining({
+            effect: "gateway-restart",
+            requiresRestart: true,
+            requiresGatewayRestart: true,
+          }),
+        },
+      }),
+    );
+  });
+
+  it("rejects component restarts when explicit confirmation is required", async () => {
+    readConfigFileSnapshotForWriteMock.mockResolvedValue(
+      createConfigWriteSnapshot({ agents: { defaults: { model: "sonnet-4.6" } } }),
+    );
+
+    const { options, respond } = createConfigHandlerHarness({
+      method: "config.patch",
+      params: {
+        baseHash: "base-hash",
+        raw: JSON.stringify({ agents: { defaults: { model: "gpt-5.4" } } }),
+        restartPolicy: "confirm-required",
+      },
+    });
+
+    await configHandlers["config.patch"](options);
+
+    expect(writeConfigFileMock).not.toHaveBeenCalled();
+    expect(scheduleGatewaySigusr1RestartMock).not.toHaveBeenCalled();
+    expect(respond).toHaveBeenCalledWith(
+      false,
+      undefined,
+      expect.objectContaining({
+        code: "INVALID_REQUEST",
+        message: expect.stringContaining("requires restart"),
+        details: {
+          reloadPlan: expect.objectContaining({
+            effect: "component-restart",
+            requiresRestart: true,
+            requiresGatewayRestart: false,
+          }),
+        },
+      }),
+    );
   });
 });

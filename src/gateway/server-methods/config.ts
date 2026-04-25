@@ -33,6 +33,7 @@ import {
   buildGatewayReloadPlan,
   diffConfigPaths,
   resolveGatewayReloadSettings,
+  type GatewayReloadPlan,
 } from "../config-reload.js";
 import {
   formatControlPlaneActor,
@@ -297,6 +298,67 @@ function shouldScheduleDirectConfigRestart(params: {
   return false;
 }
 
+function shouldRequireGatewayRestart(params: {
+  changedPaths: string[];
+  nextConfig: OpenClawConfig;
+  plan: GatewayReloadPlan;
+}): boolean {
+  if (params.changedPaths.length === 0) {
+    return false;
+  }
+  const reloadSettings = resolveGatewayReloadSettings(params.nextConfig);
+  return (
+    reloadSettings.mode === "off" || reloadSettings.mode === "restart" || params.plan.restartGateway
+  );
+}
+
+function serializeReloadPlan(params: {
+  changedPaths: string[];
+  nextConfig: OpenClawConfig;
+  plan: GatewayReloadPlan;
+}) {
+  const reloadSettings = resolveGatewayReloadSettings(params.nextConfig);
+  const requiresGatewayRestart = shouldRequireGatewayRestart(params);
+  const componentActions = {
+    reloadHooks: params.plan.reloadHooks,
+    restartGmailWatcher: params.plan.restartGmailWatcher,
+    restartCron: params.plan.restartCron,
+    restartHeartbeat: params.plan.restartHeartbeat,
+    restartHealthMonitor: params.plan.restartHealthMonitor,
+    restartChannels: Array.from(params.plan.restartChannels).toSorted(),
+  };
+  const hasComponentRestart =
+    componentActions.reloadHooks ||
+    componentActions.restartGmailWatcher ||
+    componentActions.restartCron ||
+    componentActions.restartHeartbeat ||
+    componentActions.restartHealthMonitor ||
+    componentActions.restartChannels.length > 0;
+  const requiresRestart = requiresGatewayRestart || hasComponentRestart;
+  const effect = requiresGatewayRestart
+    ? "gateway-restart"
+    : hasComponentRestart
+      ? "component-restart"
+      : params.plan.hotReasons.length > 0
+        ? "hot"
+        : "none";
+
+  return {
+    changedPaths: params.changedPaths,
+    mode: reloadSettings.mode,
+    effect,
+    requiresRestart,
+    requiresGatewayRestart,
+    restartReasons:
+      reloadSettings.mode === "restart" && params.changedPaths.length > 0
+        ? params.changedPaths
+        : params.plan.restartReasons,
+    hotReasons: params.plan.hotReasons,
+    noopPaths: params.plan.noopPaths,
+    actions: componentActions,
+  };
+}
+
 async function ensureResolvableSecretRefsOrRespond(params: {
   config: OpenClawConfig;
   respond: RespondFn;
@@ -456,6 +518,48 @@ export const configHandlers: GatewayRequestHandlers = {
     if (!(await ensureResolvableSecretRefsOrRespond({ config: parsed.config, respond }))) {
       return;
     }
+    const changedPaths = diffConfigPaths(snapshot.config, parsed.config);
+    const reloadPlan = buildGatewayReloadPlan(changedPaths);
+    const serializedReloadPlan = serializeReloadPlan({
+      changedPaths,
+      nextConfig: parsed.config,
+      plan: reloadPlan,
+    });
+    const dryRun = (params as { dryRun?: unknown }).dryRun === true;
+    const restartPolicy = (params as { restartPolicy?: unknown }).restartPolicy;
+
+    if (dryRun) {
+      respond(
+        true,
+        {
+          ok: true,
+          dryRun: true,
+          path: createConfigIO().configPath,
+          config: redactConfigObject(parsed.config, parsed.schema.uiHints),
+          reloadPlan: serializedReloadPlan,
+        },
+        undefined,
+      );
+      return;
+    }
+
+    if (restartPolicy === "confirm-required" && serializedReloadPlan.requiresRestart) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.INVALID_REQUEST,
+          "config.set requires restart; retry after user confirmation",
+          {
+            details: {
+              reloadPlan: serializedReloadPlan,
+            },
+          },
+        ),
+      );
+      return;
+    }
+
     await writeConfigFile(parsed.config, writeOptions);
     respond(
       true,
@@ -463,6 +567,7 @@ export const configHandlers: GatewayRequestHandlers = {
         ok: true,
         path: createConfigIO().configPath,
         config: redactConfigObject(parsed.config, parsed.schema.uiHints),
+        reloadPlan: serializedReloadPlan,
       },
       undefined,
     );
@@ -545,6 +650,14 @@ export const configHandlers: GatewayRequestHandlers = {
     }
     const changedPaths = diffConfigPaths(snapshot.config, validated.config);
     const actor = resolveControlPlaneActor(client);
+    const reloadPlan = buildGatewayReloadPlan(changedPaths);
+    const serializedReloadPlan = serializeReloadPlan({
+      changedPaths,
+      nextConfig: validated.config,
+      plan: reloadPlan,
+    });
+    const dryRun = (params as { dryRun?: unknown }).dryRun === true;
+    const restartPolicy = (params as { restartPolicy?: unknown }).restartPolicy;
 
     // No-op: if the validated config is identical to the current config,
     // skip the file write and SIGUSR1 restart entirely. This avoids a full
@@ -561,8 +674,41 @@ export const configHandlers: GatewayRequestHandlers = {
           noop: true,
           path: createConfigIO().configPath,
           config: redactConfigObject(validated.config, schemaPatch.uiHints),
+          reloadPlan: serializedReloadPlan,
         },
         undefined,
+      );
+      return;
+    }
+
+    if (dryRun) {
+      respond(
+        true,
+        {
+          ok: true,
+          dryRun: true,
+          path: createConfigIO().configPath,
+          config: redactConfigObject(validated.config, schemaPatch.uiHints),
+          reloadPlan: serializedReloadPlan,
+        },
+        undefined,
+      );
+      return;
+    }
+
+    if (restartPolicy === "confirm-required" && serializedReloadPlan.requiresRestart) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.INVALID_REQUEST,
+          "config.patch requires restart; retry after user confirmation",
+          {
+            details: {
+              reloadPlan: serializedReloadPlan,
+            },
+          },
+        ),
       );
       return;
     }
@@ -615,6 +761,7 @@ export const configHandlers: GatewayRequestHandlers = {
         ok: true,
         path: createConfigIO().configPath,
         config: redactConfigObject(validated.config, schemaPatch.uiHints),
+        reloadPlan: serializedReloadPlan,
         restart,
         sentinel: {
           path: sentinelPath,
@@ -643,6 +790,47 @@ export const configHandlers: GatewayRequestHandlers = {
     }
     const changedPaths = diffConfigPaths(snapshot.config, parsed.config);
     const actor = resolveControlPlaneActor(client);
+    const reloadPlan = buildGatewayReloadPlan(changedPaths);
+    const serializedReloadPlan = serializeReloadPlan({
+      changedPaths,
+      nextConfig: parsed.config,
+      plan: reloadPlan,
+    });
+    const dryRun = (params as { dryRun?: unknown }).dryRun === true;
+    const restartPolicy = (params as { restartPolicy?: unknown }).restartPolicy;
+
+    if (dryRun) {
+      respond(
+        true,
+        {
+          ok: true,
+          dryRun: true,
+          path: createConfigIO().configPath,
+          config: redactConfigObject(parsed.config, parsed.schema.uiHints),
+          reloadPlan: serializedReloadPlan,
+        },
+        undefined,
+      );
+      return;
+    }
+
+    if (restartPolicy === "confirm-required" && serializedReloadPlan.requiresRestart) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.INVALID_REQUEST,
+          "config.apply requires restart; retry after user confirmation",
+          {
+            details: {
+              reloadPlan: serializedReloadPlan,
+            },
+          },
+        ),
+      );
+      return;
+    }
+
     context?.logGateway?.info(
       `config.apply write ${formatControlPlaneActor(actor)} changedPaths=${summarizeChangedPaths(changedPaths)} restartReason=config.apply`,
     );
@@ -688,6 +876,7 @@ export const configHandlers: GatewayRequestHandlers = {
         ok: true,
         path: createConfigIO().configPath,
         config: redactConfigObject(parsed.config, parsed.schema.uiHints),
+        reloadPlan: serializedReloadPlan,
         restart,
         sentinel: {
           path: sentinelPath,

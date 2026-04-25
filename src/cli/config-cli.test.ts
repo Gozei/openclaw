@@ -132,8 +132,19 @@ async function runValidateJsonAndGetPayload() {
 let registerConfigCli: typeof import("./config-cli.js").registerConfigCli;
 let sharedProgram: Command;
 
-async function runConfigCommand(args: string[]) {
+async function runConfigCommandRaw(args: string[]) {
   await sharedProgram.parseAsync(args, { from: "user" });
+}
+
+async function runConfigCommand(args: string[]) {
+  const withRestartConfirmation =
+    args[0] === "config" &&
+    args[1] === "set" &&
+    !args.includes("--dry-run") &&
+    !args.includes("--yes")
+      ? [...args, "--yes"]
+      : args;
+  await runConfigCommandRaw(withRestartConfirmation);
 }
 
 describe("config cli", () => {
@@ -380,6 +391,44 @@ describe("config cli", () => {
         expect.stringContaining(
           "Removed inactive gateway.auth.password for gateway.auth.mode=token",
         ),
+      );
+    });
+
+    it("requires --yes for restart-impacting config set in non-interactive runs", async () => {
+      const resolved: OpenClawConfig = {
+        gateway: { port: 18789 },
+      };
+      setSnapshot(resolved, resolved);
+      const originalIsTTY = process.stdin.isTTY;
+      Object.defineProperty(process.stdin, "isTTY", { value: false, configurable: true });
+      try {
+        await expect(
+          runConfigCommandRaw(["config", "set", "agents.defaults.model", "gpt-5.4"]),
+        ).rejects.toThrow("__exit__:1");
+      } finally {
+        Object.defineProperty(process.stdin, "isTTY", {
+          value: originalIsTTY,
+          configurable: true,
+        });
+      }
+
+      expect(mockWriteConfigFile).not.toHaveBeenCalled();
+      expect(mockError).toHaveBeenCalledWith(
+        expect.stringContaining("requires a restart operation"),
+      );
+    });
+
+    it("allows --yes to confirm component restart impact", async () => {
+      const resolved: OpenClawConfig = {
+        gateway: { port: 18789 },
+      };
+      setSnapshot(resolved, resolved);
+
+      await runConfigCommandRaw(["config", "set", "agents.defaults.model", "gpt-5.4", "--yes"]);
+
+      expect(mockWriteConfigFile).toHaveBeenCalledTimes(1);
+      expect(mockLog).toHaveBeenCalledWith(
+        expect.stringContaining("This change will restart a Gateway component."),
       );
     });
   });
@@ -653,6 +702,7 @@ describe("config cli", () => {
       expect(helpText).toContain("--batch-json");
       expect(helpText).toContain("--dry-run");
       expect(helpText).toContain("--allow-exec");
+      expect(helpText).toContain("--yes");
       expect(helpText).toContain("openclaw config set gateway.port 19001 --strict-json");
       expect(helpText).toContain(
         "openclaw config set channels.discord.token --ref-provider default --ref-source",

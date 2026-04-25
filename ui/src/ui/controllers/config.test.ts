@@ -262,9 +262,16 @@ describe("applyConfig", () => {
 
     await applyConfig(state);
 
-    expect(request).toHaveBeenCalledWith("config.apply", {
+    expect(request).toHaveBeenNthCalledWith(1, "config.apply", {
       raw: '{\n  agent: { workspace: "~/openclaw" }\n}\n',
       baseHash: "hash-123",
+      dryRun: true,
+      sessionKey: "agent:main:whatsapp:dm:+15555550123",
+    });
+    expect(request).toHaveBeenNthCalledWith(2, "config.apply", {
+      raw: '{\n  agent: { workspace: "~/openclaw" }\n}\n',
+      baseHash: "hash-123",
+      restartPolicy: "confirm-required",
       sessionKey: "agent:main:whatsapp:dm:+15555550123",
     });
   });
@@ -300,6 +307,7 @@ describe("applyConfig", () => {
       raw: string;
       baseHash: string;
       sessionKey: string;
+      dryRun: boolean;
     };
     const parsed = JSON.parse(params.raw) as {
       gateway: { port: unknown; debug: unknown };
@@ -309,6 +317,7 @@ describe("applyConfig", () => {
     expect(parsed.gateway.debug).toBe(true);
     expect(params.baseHash).toBe("hash-apply-1");
     expect(params.sessionKey).toBe("agent:main:web:dm:test");
+    expect(params.dryRun).toBe(true);
   });
 });
 
@@ -339,7 +348,7 @@ describe("saveConfig", () => {
     await saveConfig(state);
 
     expect(request.mock.calls[0]?.[0]).toBe("config.set");
-    const params = request.mock.calls[0]?.[1] as { raw: string; baseHash: string };
+    const params = request.mock.calls[0]?.[1] as { raw: string; baseHash: string; dryRun: boolean };
     const parsed = JSON.parse(params.raw) as {
       gateway: { port: unknown; enabled: unknown };
     };
@@ -347,6 +356,7 @@ describe("saveConfig", () => {
     expect(parsed.gateway.port).toBe(18789);
     expect(parsed.gateway.enabled).toBe(false);
     expect(params.baseHash).toBe("hash-save-1");
+    expect(params.dryRun).toBe(true);
   });
 
   it("skips coercion when schema is not an object", async () => {
@@ -364,12 +374,110 @@ describe("saveConfig", () => {
     await saveConfig(state);
 
     expect(request.mock.calls[0]?.[0]).toBe("config.set");
-    const params = request.mock.calls[0]?.[1] as { raw: string; baseHash: string };
+    const params = request.mock.calls[0]?.[1] as { raw: string; baseHash: string; dryRun: boolean };
     const parsed = JSON.parse(params.raw) as {
       gateway: { port: unknown };
     };
     expect(parsed.gateway.port).toBe("18789");
     expect(params.baseHash).toBe("hash-save-2");
+    expect(params.dryRun).toBe(true);
+  });
+
+  it("asks before saving a config change that requires a Gateway restart", async () => {
+    const confirm = vi.spyOn(globalThis, "confirm").mockReturnValueOnce(true);
+    const request = vi.fn().mockImplementation(async (method: string, params: unknown) => {
+      if (method === "config.set" && (params as { dryRun?: boolean }).dryRun) {
+        return {
+          reloadPlan: {
+            effect: "gateway-restart",
+            requiresGatewayRestart: true,
+            restartReasons: ["gateway.port"],
+          },
+        };
+      }
+      if (method === "config.get") {
+        return { config: {}, valid: true, issues: [], raw: "{\n}\n" };
+      }
+      return {};
+    });
+    const state = createState();
+    state.connected = true;
+    state.client = { request } as unknown as ConfigState["client"];
+    state.configFormMode = "raw";
+    state.configRaw = "{ gateway: { port: 19001 } }";
+    state.configSnapshot = { hash: "hash-restart", raw: "{}" };
+
+    await saveConfig(state);
+
+    expect(confirm).toHaveBeenCalledWith(
+      expect.stringContaining("requires a full Gateway restart"),
+    );
+    expect(request).toHaveBeenNthCalledWith(2, "config.set", {
+      raw: "{ gateway: { port: 19001 } }",
+      baseHash: "hash-restart",
+      restartPolicy: "auto",
+    });
+    confirm.mockRestore();
+  });
+
+  it("does not save when Gateway restart confirmation is declined", async () => {
+    const confirm = vi.spyOn(globalThis, "confirm").mockReturnValueOnce(false);
+    const request = vi.fn().mockResolvedValue({
+      reloadPlan: {
+        effect: "gateway-restart",
+        requiresRestart: true,
+        requiresGatewayRestart: true,
+        restartReasons: ["gateway.port"],
+      },
+    });
+    const state = createState();
+    state.connected = true;
+    state.client = { request } as unknown as ConfigState["client"];
+    state.configFormMode = "raw";
+    state.configRaw = "{ gateway: { port: 19001 } }";
+    state.configSnapshot = { hash: "hash-restart", raw: "{}" };
+
+    await saveConfig(state);
+
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(state.lastError).toContain("not confirmed");
+    confirm.mockRestore();
+  });
+
+  it("asks before saving a config change that restarts a Gateway component", async () => {
+    const confirm = vi.spyOn(globalThis, "confirm").mockReturnValueOnce(true);
+    const request = vi.fn().mockImplementation(async (method: string, params: unknown) => {
+      if (method === "config.set" && (params as { dryRun?: boolean }).dryRun) {
+        return {
+          reloadPlan: {
+            effect: "component-restart",
+            requiresRestart: true,
+            requiresGatewayRestart: false,
+            restartReasons: ["agents.defaults.model"],
+          },
+        };
+      }
+      if (method === "config.get") {
+        return { config: {}, valid: true, issues: [], raw: "{\n}\n" };
+      }
+      return {};
+    });
+    const state = createState();
+    state.connected = true;
+    state.client = { request } as unknown as ConfigState["client"];
+    state.configFormMode = "raw";
+    state.configRaw = "{ agents: { defaults: { model: 'gpt-5.4' } } }";
+    state.configSnapshot = { hash: "hash-component-restart", raw: "{}" };
+
+    await saveConfig(state);
+
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining("Gateway components"));
+    expect(request).toHaveBeenNthCalledWith(2, "config.set", {
+      raw: "{ agents: { defaults: { model: 'gpt-5.4' } } }",
+      baseHash: "hash-component-restart",
+      restartPolicy: "auto",
+    });
+    confirm.mockRestore();
   });
 });
 

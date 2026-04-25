@@ -813,7 +813,7 @@ function handleChatGatewayEvent(host: GatewayHost, payload: ChatEventPayload | u
     deferredSessionKey &&
     payloadSessionKey &&
     deferredSessionKey === payloadSessionKey &&
-    isTerminalChatState(state) &&
+    (state === "final" || state === "aborted") &&
     payloadSessionKey === host.sessionKey &&
     !host.chatRunId,
   );

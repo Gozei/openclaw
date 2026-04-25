@@ -602,6 +602,7 @@ Subcommands:
 - `config set --dry-run`: validate assignments without writing `openclaw.json` (exec SecretRef checks are skipped by default).
 - `config set --allow-exec --dry-run`: opt in to exec SecretRef dry-run checks (may execute provider commands).
 - `config set --dry-run --json`: emit machine-readable dry-run output (checks + completeness signal, operations, refs checked/skipped, errors).
+- `config set --yes`: confirm writes that require Gateway/component restart impact in non-interactive runs.
 - `config set --strict-json`: require JSON5 parsing for path/value input. `--json` remains a legacy alias for strict parsing outside dry-run output mode.
 - `config unset <path>`: remove a value.
 - `config file`: print the active config file path.

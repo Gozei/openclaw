@@ -245,7 +245,7 @@ export async function saveAgentsConfig(state: AgentsConfigSaveState) {
   const selectedBefore = state.agentsSelectedId;
   await saveConfig(state);
   await loadAgents(state);
-  if (selectedBefore && state.agentsList?.agents.some((entry) => entry.id === selectedBefore)) {
+  if (selectedBefore && state.agentsList?.agents?.some((entry) => entry.id === selectedBefore)) {
     state.agentsSelectedId = selectedBefore;
   }
 }

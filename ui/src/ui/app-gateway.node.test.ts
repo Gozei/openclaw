@@ -97,6 +97,7 @@ vi.mock("./controllers/chat.ts", async (importOriginal) => {
 type TestGatewayHost = Parameters<typeof connectGateway>[0] & {
   chatSideResult: unknown;
   chatSideResultTerminalRuns: Set<string>;
+  chatMessages: unknown[];
   chatStream: string | null;
   chatToolMessages: Record<string, unknown>[];
   toolStreamById: Map<string, unknown>;
@@ -666,7 +667,7 @@ describe("connectGateway", () => {
     },
   );
 
-  it.each(["aborted", "error"] as const)(
+  it.each(["aborted", "final"] as const)(
     "replays deferred session.message reloads after %s clears the active run",
     (terminalState) => {
       const { host, client } = connectHostGateway();
@@ -688,7 +689,10 @@ describe("connectGateway", () => {
           runId: "main-run-3",
           sessionKey: "main",
           state: terminalState,
-          errorMessage: terminalState === "error" ? "chat failed" : undefined,
+          message:
+            terminalState === "final"
+              ? { role: "assistant", content: [{ type: "text", text: "done" }] }
+              : undefined,
         },
       });
 
@@ -697,6 +701,37 @@ describe("connectGateway", () => {
       expect(loadChatHistoryMock).toHaveBeenCalledWith(host);
     },
   );
+
+  it("does not replay deferred session.message reloads after chat errors", () => {
+    const { host, client } = connectHostGateway();
+    host.chatRunId = "main-run-error";
+    host.chatMessages = [{ role: "user", content: [{ type: "text", text: "hello" }] }];
+    loadChatHistoryMock.mockClear();
+
+    client.emitEvent({
+      event: "session.message",
+      payload: {
+        sessionKey: "main",
+      },
+    });
+
+    client.emitEvent({
+      event: "chat",
+      payload: {
+        runId: "main-run-error",
+        sessionKey: "main",
+        state: "error",
+        errorMessage: "chat failed",
+      },
+    });
+
+    expect(host.chatRunId).toBeNull();
+    expect(host.lastError).toBe("chat failed");
+    expect(host.chatMessages).toEqual([
+      { role: "user", content: [{ type: "text", text: "hello" }] },
+    ]);
+    expect(loadChatHistoryMock).not.toHaveBeenCalled();
+  });
 
   it("clears tracked BTW terminal runs after reconnect hello", () => {
     const host = createHost();
