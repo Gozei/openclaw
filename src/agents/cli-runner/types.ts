@@ -8,22 +8,27 @@ import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import type { EvolutionRecallTrace } from "../../evolution/preflight.js";
 import type { PromptImageOrderEntry } from "../../media/prompt-image-order.js";
 import type { ResolvedCliBackend } from "../cli-backends.js";
+import type { EmbeddedRunTrigger } from "../pi-embedded-runner/run/params.js";
 import type { SkillSnapshot } from "../skills.js";
 
 export type RunCliAgentParams = {
   sessionId: string;
   sessionKey?: string;
   agentId?: string;
+  trigger?: EmbeddedRunTrigger;
   sessionFile: string;
   workspaceDir: string;
   config?: OpenClawConfig;
   prompt: string;
+  transcriptPrompt?: string;
   provider: string;
   model?: string;
   thinkLevel?: ThinkLevel;
   timeoutMs: number;
   runId: string;
   extraSystemPrompt?: string;
+  /** Static portion of extraSystemPrompt (excluding per-message inbound metadata) for session reuse hashing. */
+  extraSystemPromptStatic?: string;
   streamParams?: import("../command/types.js").AgentStreamParams;
   ownerNumbers?: string[];
   cliSessionId?: string;
@@ -34,6 +39,7 @@ export type RunCliAgentParams = {
   images?: ImageContent[];
   imageOrder?: PromptImageOrderEntry[];
   skillsSnapshot?: SkillSnapshot;
+  messageChannel?: string;
   messageProvider?: string;
   agentAccountId?: string;
   senderIsOwner?: boolean;
@@ -45,6 +51,7 @@ export type CliPreparedBackend = {
   backend: CliBackendConfig;
   cleanup?: () => Promise<void>;
   mcpConfigHash?: string;
+  mcpResumeHash?: string;
   env?: Record<string, string>;
 };
 
@@ -68,6 +75,7 @@ export type PreparedCliRunContext = {
   bootstrapPromptWarningLines: string[];
   heartbeatPrompt?: string;
   authEpoch?: string;
+  authEpochVersion: number;
   extraSystemPromptHash?: string;
   evolutionRecall?: EvolutionRecallTrace;
 };

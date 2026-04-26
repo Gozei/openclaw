@@ -712,6 +712,7 @@ export const pt_BR: TranslationMap = {
     uk: "Українська (ucraniano)",
     id: "Bahasa Indonesia (Indonésio)",
     pl: "Polski (Polonês)",
+    th: "ไทย (tailandês)",
   },
   cron: {
     summary: {

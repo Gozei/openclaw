@@ -19,7 +19,10 @@ import {
 import { applyPluginAutoEnable } from "../config/plugin-auto-enable.js";
 import { resolveMainSessionKey } from "../config/sessions.js";
 import { clearAgentRunContext } from "../infra/agent-events.js";
-import { isDiagnosticsEnabled } from "../infra/diagnostic-events.js";
+import {
+  isDiagnosticsEnabled,
+  setDiagnosticsEnabledForProcess,
+} from "../infra/diagnostic-events.js";
 import { isTruthyEnvValue, isVitestRuntimeEnv, logAcceptedEnvOption } from "../infra/env.js";
 import { ensureOpenClawCliOnPath } from "../infra/path-env.js";
 import { setGatewaySigusr1RestartPolicy, setPreRestartDeferralCheck } from "../infra/restart.js";
@@ -54,7 +57,6 @@ import { GATEWAY_EVENTS } from "./server-methods-list.js";
 import { coreGatewayHandlers } from "./server-methods.js";
 import { loadGatewayModelCatalog } from "./server-model-catalog.js";
 import { createGatewayNodeSessionRuntime } from "./server-node-session-runtime.js";
-import { reloadDeferredGatewayPlugins } from "./server-plugin-bootstrap.js";
 import { setFallbackGatewayContextResolver } from "./server-plugins.js";
 import { startManagedGatewayConfigReloader } from "./server-reload-handlers.js";
 import { createGatewayRequestContext } from "./server-request-context.js";
@@ -229,9 +231,10 @@ export type GatewayServerOptions = {
     prompter: import("../wizard/prompts.js").WizardPrompter,
   ) => Promise<void>;
   /**
-   * Test-only: wait for post-listen sidecars such as plugin services before returning.
+   * Let post-listen sidecars (channels, plugin services) finish in the background.
+   * Defaults to false so gateway startup waits until sidecars are ready.
    */
-  awaitStartupSidecars?: boolean;
+  deferStartupSidecars?: boolean;
   /**
    * Optional startup timestamp used for concise readiness logging.
    */
@@ -305,6 +308,7 @@ export async function startGatewayServer(
     }
   }
   const diagnosticsEnabled = isDiagnosticsEnabled(cfgAtStart);
+  setDiagnosticsEnabledForProcess(diagnosticsEnabled);
   if (diagnosticsEnabled) {
     startDiagnosticHeartbeat(undefined, { getConfig: getRuntimeConfig });
   }
@@ -627,6 +631,7 @@ export async function startGatewayServer(
         log,
         logDiscovery,
         nodeRegistry,
+        pluginRegistry,
         broadcast,
         nodeSendToAllSubscribed,
         getPresenceVersion,
@@ -695,6 +700,9 @@ export async function startGatewayServer(
       sharedGatewaySessionGenerationState,
       resolveSharedGatewaySessionGenerationForConfig,
       clients,
+      startChannel,
+      stopChannel,
+      logChannels,
     });
 
     const canvasHostServerPort = (canvasHostServer as CanvasHostServer | null)?.port;
@@ -767,6 +775,7 @@ export async function startGatewayServer(
 
     if (!minimalTestGateway) {
       if (deferredConfiguredChannelPluginIds.length > 0) {
+        const { reloadDeferredGatewayPlugins } = await import("./server-plugin-bootstrap.js");
         ({ pluginRegistry, gatewayMethods: baseGatewayMethods } = reloadDeferredGatewayPlugins({
           cfg: gatewayPluginConfigAtStart,
           workspaceDir: defaultWorkspaceDir,
@@ -805,6 +814,7 @@ export async function startGatewayServer(
     });
     await startListening();
     startupTrace.mark("http.bound");
+    const sessionDeliveryRecoveryMaxEnqueuedAt = Date.now();
     ({
       stopGatewayUpdateCheck: runtimeState.stopGatewayUpdateCheck,
       tailscaleCleanup: runtimeState.tailscaleCleanup,
@@ -840,15 +850,16 @@ export async function startGatewayServer(
           startupSidecarsReady = true;
         },
         startupTrace,
-        awaitSidecars: opts.awaitStartupSidecars,
+        deferSidecars: opts.deferStartupSidecars === true,
       }),
     ));
     startupTrace.mark("ready");
 
-    // HTTP is live before sidecars finish; /readyz stays red until the startup sidecars settle.
     const activated = activateGatewayScheduledServices({
       minimalTestGateway,
       cfgAtStart,
+      deps,
+      sessionDeliveryRecoveryMaxEnqueuedAt,
       cron: runtimeState.cronState.cron,
       logCron,
       log,
@@ -858,6 +869,7 @@ export async function startGatewayServer(
     runtimeState.configReloader = startManagedGatewayConfigReloader({
       minimalTestGateway,
       initialConfig: cfgAtStart,
+      initialCompareConfig: startupLastGoodSnapshot.sourceConfig,
       initialInternalWriteHash: startupInternalWriteHash,
       watchPath: configSnapshot.path,
       readSnapshot: readConfigFileSnapshot,

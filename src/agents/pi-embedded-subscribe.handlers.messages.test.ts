@@ -1,12 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
+import { createStreamingDirectiveAccumulator } from "../auto-reply/reply/streaming-directives.js";
 import { createInlineCodeState } from "../markdown/code-spans.js";
 import {
   buildAssistantStreamData,
+  consumePendingAssistantReplyDirectivesIntoReply,
   consumePendingToolMediaIntoReply,
   consumePendingToolMediaReply,
   handleMessageEnd,
   handleMessageUpdate,
   hasAssistantVisibleReply,
+  recordPendingAssistantReplyDirectives,
   resolveSilentReplyFallbackText,
 } from "./pi-embedded-subscribe.handlers.messages.js";
 import type { EmbeddedPiSubscribeContext } from "./pi-embedded-subscribe.handlers.types.js";
@@ -24,6 +27,8 @@ function createMessageUpdateContext(
     resetAssistantMessageState?: ReturnType<typeof vi.fn>;
     debug?: ReturnType<typeof vi.fn>;
     shouldEmitPartialReplies?: boolean;
+    consumePartialReplyDirectives?: ReturnType<typeof vi.fn>;
+    state?: Record<string, unknown>;
   } = {},
 ) {
   return {
@@ -53,15 +58,19 @@ function createMessageUpdateContext(
       assistantMessageIndex: 0,
       lastAssistantStreamItemId: undefined,
       assistantTexts: [],
+      pendingAssistantReplyDirectives: undefined,
+      ...params.state,
     },
     log: { debug: params.debug ?? vi.fn() },
     noteLastAssistant: vi.fn(),
     noteFirstToken: vi.fn(),
     stripBlockTags: (text: string) => text,
-    consumePartialReplyDirectives: vi.fn(() => null),
+    consumePartialReplyDirectives: params.consumePartialReplyDirectives ?? vi.fn(() => null),
     emitReasoningStream: vi.fn(),
     flushBlockReplyBuffer: params.flushBlockReplyBuffer ?? vi.fn(),
     resetAssistantMessageState: params.resetAssistantMessageState ?? vi.fn(),
+    recordAssistantUsage: vi.fn(),
+    commitAssistantUsage: vi.fn(),
   } as unknown as EmbeddedPiSubscribeContext;
 }
 
@@ -109,6 +118,7 @@ function createMessageEndContext(
     noteLastAssistant: vi.fn(),
     noteFirstToken: vi.fn(),
     recordAssistantUsage: vi.fn(),
+    commitAssistantUsage: vi.fn(),
     log: { debug: vi.fn(), warn: vi.fn() },
     stripBlockTags: (text: string) => text,
     finalizeAssistantTexts: params.finalizeAssistantTexts ?? vi.fn(),
@@ -196,6 +206,54 @@ describe("buildAssistantStreamData", () => {
   });
 });
 
+describe("pending assistant reply directives", () => {
+  it("merges directive metadata into the next non-reasoning block reply", () => {
+    const state = { pendingAssistantReplyDirectives: undefined };
+
+    recordPendingAssistantReplyDirectives(state, {
+      text: "",
+      mediaUrls: ["/tmp/reply.ogg"],
+      replyToCurrent: true,
+      replyToTag: true,
+      audioAsVoice: true,
+      isSilent: false,
+    });
+
+    expect(
+      consumePendingAssistantReplyDirectivesIntoReply(state, {
+        text: "Done.",
+      }),
+    ).toEqual({
+      text: "Done.",
+      mediaUrls: ["/tmp/reply.ogg"],
+      audioAsVoice: true,
+      replyToId: undefined,
+      replyToTag: true,
+      replyToCurrent: true,
+    });
+    expect(state.pendingAssistantReplyDirectives).toBeUndefined();
+  });
+
+  it("does not consume pending directive metadata on reasoning replies", () => {
+    const state = {
+      pendingAssistantReplyDirectives: {
+        mediaUrls: ["/tmp/reply.png"],
+      },
+    };
+
+    expect(
+      consumePendingAssistantReplyDirectivesIntoReply(state, {
+        text: "Thinking...",
+        isReasoning: true,
+      }),
+    ).toEqual({
+      text: "Thinking...",
+      isReasoning: true,
+    });
+    expect(state.pendingAssistantReplyDirectives?.mediaUrls).toEqual(["/tmp/reply.png"]);
+  });
+});
+
 describe("handleMessageUpdate", () => {
   it("treats phased textSignature item changes as assistant-message boundaries", () => {
     const flushBlockReplyBuffer = vi.fn();
@@ -246,6 +304,54 @@ describe("handleMessageUpdate", () => {
     expect(onAssistantMessageStart).toHaveBeenCalledTimes(1);
     expect(context.state.lastAssistantStreamItemId).toBe("item-2");
   });
+
+  it("preserves phase-aware media, voice, and reply directives for block delivery", () => {
+    const accumulator = createStreamingDirectiveAccumulator();
+    const ctx = createMessageUpdateContext({
+      consumePartialReplyDirectives: vi.fn((text: string, options?: { final?: boolean }) =>
+        accumulator.consume(text, options),
+      ),
+      state: {
+        blockReplyBreak: "message_end",
+      },
+    });
+    const replyText = "Done.\n\n[[reply_to_current]]\n[[audio_as_voice]]\nMEDIA:/tmp/reply.ogg";
+
+    handleMessageUpdate(
+      ctx,
+      createTextUpdateEvent({
+        type: "text_delta",
+        text: replyText,
+        id: "item-final",
+        signaturePhase: "final_answer",
+        partialPhase: "final_answer",
+      }),
+    );
+    handleMessageUpdate(
+      ctx,
+      createTextUpdateEvent({
+        type: "text_end",
+        text: replyText,
+        id: "item-final",
+        signaturePhase: "final_answer",
+        partialPhase: "final_answer",
+      }),
+    );
+
+    expect(ctx.state.blockBuffer).toBe("Done.");
+    expect(
+      consumePendingAssistantReplyDirectivesIntoReply(ctx.state, {
+        text: "Done.",
+      }),
+    ).toEqual({
+      text: "Done.",
+      mediaUrls: ["/tmp/reply.ogg"],
+      audioAsVoice: true,
+      replyToId: undefined,
+      replyToTag: true,
+      replyToCurrent: true,
+    });
+  });
 });
 
 describe("consumePendingToolMediaIntoReply", () => {
@@ -253,6 +359,7 @@ describe("consumePendingToolMediaIntoReply", () => {
     const state = {
       pendingToolMediaUrls: ["/tmp/a.png", "/tmp/b.png"],
       pendingToolAudioAsVoice: false,
+      pendingToolTrustedLocalMedia: false,
     };
 
     expect(
@@ -271,6 +378,7 @@ describe("consumePendingToolMediaIntoReply", () => {
     const state = {
       pendingToolMediaUrls: ["/tmp/a.png"],
       pendingToolAudioAsVoice: true,
+      pendingToolTrustedLocalMedia: false,
     };
 
     expect(
@@ -292,6 +400,7 @@ describe("consumePendingToolMediaReply", () => {
     const state = {
       pendingToolMediaUrls: ["/tmp/reply.opus"],
       pendingToolAudioAsVoice: true,
+      pendingToolTrustedLocalMedia: false,
     };
 
     expect(consumePendingToolMediaReply(state)).toEqual({

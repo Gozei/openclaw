@@ -26,6 +26,7 @@ import {
 } from "../chat/message-normalizer.ts";
 import { PinnedMessages } from "../chat/pinned-messages.ts";
 import { getPinnedMessageSummary } from "../chat/pinned-summary.ts";
+import type { RealtimeTalkStatus } from "../chat/realtime-talk.ts";
 import { messageMatchesSearchQuery } from "../chat/search-match.ts";
 import { getOrCreateSessionCacheValue } from "../chat/session-cache.ts";
 import type { ChatSideResult } from "../chat/side-result.ts";
@@ -70,6 +71,10 @@ export type ChatProps = {
   assistantAvatarUrl?: string | null;
   draft: string;
   queue: ChatQueueItem[];
+  realtimeTalkActive?: boolean;
+  realtimeTalkStatus?: RealtimeTalkStatus;
+  realtimeTalkDetail?: string | null;
+  realtimeTalkTranscript?: string | null;
   connected: boolean;
   canSend: boolean;
   disabledReason: string | null;
@@ -85,6 +90,8 @@ export type ChatProps = {
   allowExternalEmbedUrls?: boolean;
   assistantName: string;
   assistantAvatar: string | null;
+  userName?: string | null;
+  userAvatar?: string | null;
   localMediaPreviewRoots?: string[];
   assistantAttachmentAuthToken?: string | null;
   autoExpandToolCalls?: boolean;
@@ -98,8 +105,11 @@ export type ChatProps = {
   onDraftChange: (next: string) => void;
   onRequestUpdate?: () => void;
   onSend: () => void;
+  onCompact?: () => void | Promise<void>;
+  onToggleRealtimeTalk?: () => void;
   onAbort?: () => void;
   onQueueRemove: (id: string) => void;
+  onQueueSteer?: (id: string) => void;
   onDismissSideResult?: () => void;
   onNewSession: () => void;
   onClearHistory?: () => void;
@@ -575,7 +585,11 @@ function parseHexRgb(hex: string): [number, number, number] | null {
   if (!/^[0-9a-fA-F]{6}$/.test(h)) {
     return null;
   }
-  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+  return [
+    Number.parseInt(h.slice(0, 2), 16),
+    Number.parseInt(h.slice(2, 4), 16),
+    Number.parseInt(h.slice(4, 6), 16),
+  ];
 }
 
 let cachedThemeNoticeColors: {

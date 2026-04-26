@@ -513,7 +513,7 @@ export async function acquireSessionWriteLock(params: {
   const normalizedSessionFile = path.join(normalizedDir, path.basename(sessionFile));
   const lockPath = `${normalizedSessionFile}.lock`;
 
-  const allowReentrant = params.allowReentrant ?? true;
+  const allowReentrant = params.allowReentrant === true;
   const held = HELD_LOCKS.get(normalizedSessionFile);
   if (allowReentrant && held) {
     held.count += 1;

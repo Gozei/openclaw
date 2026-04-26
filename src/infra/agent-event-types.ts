@@ -53,6 +53,7 @@ export type AgentPlanEventData = {
 export type AgentApprovalEventPhase = "requested" | "resolved";
 export type AgentApprovalEventStatus = "pending" | "unavailable" | "approved" | "denied" | "failed";
 export type AgentApprovalEventKind = "exec" | "plugin" | "unknown";
+export type AgentApprovalEventScope = "turn" | "session";
 
 export type AgentApprovalEventData = {
   phase: AgentApprovalEventPhase;
@@ -67,6 +68,7 @@ export type AgentApprovalEventData = {
   host?: string;
   reason?: string;
   message?: string;
+  scope?: AgentApprovalEventScope;
 };
 
 export type AgentCommandOutputEventData = {

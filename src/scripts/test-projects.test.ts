@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 const {
   applyParallelVitestCachePaths,
+  applyVitestRunPoolOverrideToArgs,
   buildFullSuiteVitestRunPlans,
   buildVitestArgs,
   buildVitestRunPlans,
@@ -27,6 +28,7 @@ const {
     config: string;
     env: NodeJS.ProcessEnv;
   }>;
+  applyVitestRunPoolOverrideToArgs: (args: string[], env?: NodeJS.ProcessEnv) => string[];
   buildFullSuiteVitestRunPlans: (
     args: string[],
     cwd?: string,
@@ -815,10 +817,10 @@ describe("test-projects args", () => {
     ]);
   });
 
-  it("routes browser extension targets to the extensions config", () => {
+  it("routes browser extension targets to the browser config", () => {
     expect(buildVitestRunPlans(["extensions/browser/index.test.ts"])).toEqual([
       {
-        config: "test/vitest/vitest.extensions.config.ts",
+        config: "test/vitest/vitest.extension-browser.config.ts",
         forwardedArgs: [],
         includePatterns: ["extensions/browser/index.test.ts"],
         watchMode: false,
@@ -859,10 +861,10 @@ describe("test-projects args", () => {
     ]);
   });
 
-  it("keeps non-provider extension file targets on the shared extensions config", () => {
+  it("routes misc extension file targets to the misc extensions config", () => {
     expect(buildVitestRunPlans(["extensions/firecrawl/index.test.ts"])).toEqual([
       {
-        config: "test/vitest/vitest.extensions.config.ts",
+        config: "test/vitest/vitest.extension-misc.config.ts",
         forwardedArgs: [],
         includePatterns: ["extensions/firecrawl/index.test.ts"],
         watchMode: false,
@@ -976,6 +978,24 @@ describe("test-projects args", () => {
     ]);
     expect(spec?.includeFilePath).toContain("openclaw-vitest-include-");
     expect(spec?.env.OPENCLAW_VITEST_INCLUDE_FILE).toBe(spec?.includeFilePath);
+  });
+
+  it("can force the Vitest runtime pool without changing config imports", () => {
+    const args = [...VITEST_NODE_PREFIX, "run", "--config", "test/vitest/vitest.unit.config.ts"];
+
+    expect(applyVitestRunPoolOverrideToArgs(args, { OPENCLAW_VITEST_RUN_POOL: "forks" })).toEqual([
+      ...args,
+      "--pool",
+      "forks",
+    ]);
+    expect(
+      applyVitestRunPoolOverrideToArgs([...args, "--pool=threads"], {
+        OPENCLAW_VITEST_RUN_POOL: "forks",
+      }),
+    ).toEqual([...args, "--pool=threads"]);
+    expect(applyVitestRunPoolOverrideToArgs(args, { OPENCLAW_VITEST_RUN_POOL: "bogus" })).toBe(
+      args,
+    );
   });
 
   it("skips channel contract configs with no matching external include patterns", () => {

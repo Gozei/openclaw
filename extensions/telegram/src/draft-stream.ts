@@ -27,10 +27,13 @@ type TelegramSendMessageDraft = (
 ) => Promise<unknown>;
 
 type TelegramSendMessageParams = Parameters<Bot["api"]["sendMessage"]>[2];
+type TelegramThreadedSendMessageParams = NonNullable<TelegramSendMessageParams> & {
+  message_thread_id?: number;
+};
 
 function hasNumericMessageThreadId(
   params: TelegramSendMessageParams | undefined,
-): params is TelegramSendMessageParams & { message_thread_id: number } {
+): params is TelegramThreadedSendMessageParams & { message_thread_id: number } {
   return (
     typeof params === "object" &&
     params !== null &&
@@ -207,7 +210,7 @@ export function createTelegramDraftStream(params: {
       if (!usedThreadParams || !THREAD_NOT_FOUND_RE.test(String(err))) {
         throw err;
       }
-      const threadlessParams: TelegramSendMessageParams = { ...sendParams };
+      const threadlessParams: TelegramThreadedSendMessageParams = { ...sendParams };
       delete threadlessParams.message_thread_id;
       params.warn?.(sendArgs.fallbackWarnMessage);
       return {

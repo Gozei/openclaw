@@ -25,6 +25,8 @@ type SubagentSurface = {
   run: (params: {
     idempotencyKey: string;
     sessionKey: string;
+    lane?: string;
+    lightContext?: boolean;
     message: string;
     extraSystemPrompt?: string;
     deliver?: boolean;
@@ -123,8 +125,7 @@ const NARRATIVE_SYSTEM_PROMPTS: Record<NarrativeLanguage, string> = {
   ].join("\n"),
 };
 
-const NARRATIVE_TIMEOUT_MS = 60_000;
-const NARRATIVE_DELETE_SETTLE_TIMEOUT_MS = 120_000;
+const NARRATIVE_TIMEOUT_MS = 15_000;
 const DREAMING_SESSION_KEY_PREFIX = "dreaming-narrative-";
 const DREAMING_TRANSCRIPT_RUN_MARKER = '"runId":"dreaming-narrative-';
 const DREAMING_ORPHAN_MIN_AGE_MS = 300_000;
@@ -200,6 +201,8 @@ async function startNarrativeRunOrFallback(params: {
     const run = await params.subagent.run({
       idempotencyKey: params.sessionKey,
       sessionKey: params.sessionKey,
+      lane: `dreaming-narrative:${params.sessionKey}`,
+      lightContext: true,
       message: params.message,
       extraSystemPrompt: NARRATIVE_SYSTEM_PROMPTS[params.language],
       deliver: false,
@@ -1050,7 +1053,6 @@ export async function generateAndAppendDreamNarrative(params: {
     evolutionContext,
   });
   let runId: string | null = null;
-  let waitStatus: string | null = null;
 
   try {
     runId = await startNarrativeRunOrFallback({
@@ -1072,7 +1074,6 @@ export async function generateAndAppendDreamNarrative(params: {
       runId,
       timeoutMs: NARRATIVE_TIMEOUT_MS,
     });
-    waitStatus = result.status;
 
     if (result.status !== "ok") {
       params.logger.warn(
@@ -1110,24 +1111,6 @@ export async function generateAndAppendDreamNarrative(params: {
       `memory-core: narrative generation failed for ${params.data.phase} phase: ${formatErrorMessage(err)}`,
     );
   } finally {
-    if (params.subagent && runId && waitStatus === "timeout") {
-      try {
-        const settle = await params.subagent.waitForRun({
-          runId,
-          timeoutMs: NARRATIVE_DELETE_SETTLE_TIMEOUT_MS,
-        });
-        if (settle.status !== "ok" && settle.status !== "error") {
-          params.logger.warn(
-            `memory-core: narrative cleanup wait ended with status=${settle.status} for ${params.data.phase} phase.`,
-          );
-        }
-      } catch (cleanupWaitErr) {
-        params.logger.warn(
-          `memory-core: narrative cleanup wait failed for ${params.data.phase} phase: ${formatErrorMessage(cleanupWaitErr)}`,
-        );
-      }
-    }
-
     // Guard against subagent becoming unavailable mid-flight (throws TypeError without this).
     if (params.subagent) {
       try {

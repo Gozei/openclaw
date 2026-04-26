@@ -58,8 +58,12 @@ export function resolveLocalVitestScheduling(
 }
 
 export function resolveDefaultVitestPool(
-  _env: Record<string, string | undefined> = process.env,
+  env: Record<string, string | undefined> = process.env,
 ): OpenClawVitestPool {
+  const override = env.OPENCLAW_VITEST_POOL?.trim();
+  if (override === "forks" || override === "threads") {
+    return override;
+  }
   return "threads";
 }
 
@@ -70,13 +74,49 @@ export function resolveRepoRootPath(value: string): string {
 }
 const isCI = isCiLikeEnv(process.env);
 const isWindows = process.platform === "win32";
-const defaultPool = resolveDefaultVitestPool();
+const defaultPool = resolveDefaultVitestPool(process.env);
 const localScheduling = resolveLocalVitestScheduling(
   process.env,
   detectVitestHostInfo(),
   defaultPool,
 );
-const ciWorkers = isWindows ? 2 : 3;
+
+function hasWorkerOverride(env: Record<string, string | undefined>): boolean {
+  return Boolean((env.OPENCLAW_VITEST_MAX_WORKERS ?? env.OPENCLAW_TEST_WORKERS)?.trim());
+}
+
+export function resolveSharedVitestWorkerConfig(params: {
+  env?: Record<string, string | undefined>;
+  isCI?: boolean;
+  isWindows?: boolean;
+  localScheduling?: LocalVitestScheduling;
+}): Pick<LocalVitestScheduling, "fileParallelism" | "maxWorkers"> {
+  const env = params.env ?? process.env;
+  const local = params.localScheduling ?? localScheduling;
+  if (hasWorkerOverride(env)) {
+    return {
+      fileParallelism: local.fileParallelism,
+      maxWorkers: local.maxWorkers,
+    };
+  }
+  if (params.isCI ?? isCI) {
+    return {
+      fileParallelism: true,
+      maxWorkers: (params.isWindows ?? isWindows) ? 2 : 3,
+    };
+  }
+  return {
+    fileParallelism: local.fileParallelism,
+    maxWorkers: local.maxWorkers,
+  };
+}
+
+const workerConfig = resolveSharedVitestWorkerConfig({
+  env: process.env,
+  isCI,
+  isWindows,
+  localScheduling,
+});
 
 if (!isCI && localScheduling.throttledBySystem && shouldPrintVitestThrottle(process.env)) {
   console.error(
@@ -118,8 +158,8 @@ export const sharedVitestConfig = {
     isolate: false,
     pool: defaultPool,
     runner: nonIsolatedRunnerPath,
-    maxWorkers: isCI ? ciWorkers : localScheduling.maxWorkers,
-    fileParallelism: isCI ? true : localScheduling.fileParallelism,
+    maxWorkers: workerConfig.maxWorkers,
+    fileParallelism: workerConfig.fileParallelism,
     forceRerunTriggers: [
       "package.json",
       "pnpm-lock.yaml",

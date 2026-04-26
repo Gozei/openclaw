@@ -1,10 +1,13 @@
 import { randomBytes } from "node:crypto";
 import fs from "node:fs/promises";
+import type { ReplyPayload } from "../../auto-reply/reply-payload.js";
 import type { ThinkLevel } from "../../auto-reply/thinking.js";
+import { SILENT_REPLY_TOKEN } from "../../auto-reply/tokens.js";
 import { ensureContextEnginesInitialized } from "../../context-engine/init.js";
 import { resolveContextEngine } from "../../context-engine/registry.js";
 import { emitAgentPlanEvent } from "../../infra/agent-events.js";
 import { sleepWithAbort } from "../../infra/backoff.js";
+import { freezeDiagnosticTraceContext } from "../../infra/diagnostic-trace-context.js";
 import { formatErrorMessage } from "../../infra/errors.js";
 import {
   finishPerfSpan,
@@ -14,6 +17,7 @@ import {
 } from "../../logging/perf.js";
 import { createTraceContext } from "../../logging/trace-context.js";
 import { getGlobalHookRunner } from "../../plugins/hook-runner-global.js";
+import { resolveProviderAuthProfileId } from "../../plugins/provider-runtime.js";
 import { enqueueCommandInLane } from "../../process/command-queue.js";
 import { normalizeOptionalString } from "../../shared/string-coerce.js";
 import { sanitizeForLog } from "../../terminal/ansi.js";
@@ -28,6 +32,7 @@ import {
 } from "../agent-scope.js";
 import {
   type AuthProfileFailureReason,
+  type AuthProfileStore,
   markAuthProfileFailure,
   resolveAuthProfileEligibility,
   markAuthProfileGood,
@@ -45,6 +50,7 @@ import {
   FailoverError,
   resolveFailoverStatus,
 } from "../failover-error.js";
+import { selectAgentHarness } from "../harness/selection.js";
 import { LiveSessionModelSwitchError } from "../live-model-switch-error.js";
 import { shouldSwitchToLiveModel, clearLiveModelSwitchPending } from "../live-model-switch.js";
 import {
@@ -55,9 +61,11 @@ import {
   resolveAuthProfileOrder,
   shouldPreferExplicitConfigApiKeyAuth,
 } from "../model-auth.js";
-import { normalizeProviderId } from "../model-selection.js";
 import { ensureOpenClawModelsJson } from "../models-config.js";
-import { disposeSessionMcpRuntime } from "../pi-bundle-mcp-tools.js";
+import {
+  retireSessionMcpRuntime,
+  retireSessionMcpRuntimeForSessionKey,
+} from "../pi-bundle-mcp-tools.js";
 import {
   classifyFailoverReason,
   extractObservedOverflowTokenCount,
@@ -74,6 +82,9 @@ import {
   parseImageSizeError,
   pickFallbackThinkingLevel,
 } from "../pi-embedded-helpers.js";
+import { resolveProviderIdForAuth } from "../provider-auth-aliases.js";
+import { buildAgentRuntimeAuthPlan } from "../runtime-plan/auth.js";
+import { buildAgentRuntimePlan } from "../runtime-plan/build.js";
 import { ensureRuntimePluginsLoaded } from "../runtime-plugins.js";
 import { derivePromptTokens, normalizeUsage, type UsageLike } from "../usage.js";
 import { redactRunIdentifier, resolveRunWorkspaceDir } from "../workspace-run.js";
@@ -144,6 +155,13 @@ type ApiKeyInfo = ResolvedProviderAuth;
 
 const MAX_SAME_MODEL_IDLE_TIMEOUT_RETRIES = 1;
 
+function createEmptyAuthProfileStore(): AuthProfileStore {
+  return {
+    version: 1,
+    profiles: {},
+  };
+}
+
 function buildTraceToolSummary(params: {
   toolMetas: Array<{ toolName: string; meta?: string }>;
   hadFailure: boolean;
@@ -206,6 +224,21 @@ function backfillSessionKey(params: {
     );
     return undefined;
   }
+}
+
+function buildHandledReplyPayloads(reply?: ReplyPayload) {
+  const normalized = reply ?? { text: SILENT_REPLY_TOKEN };
+  return [
+    {
+      text: normalized.text,
+      mediaUrl: normalized.mediaUrl,
+      mediaUrls: normalized.mediaUrls,
+      replyToId: normalized.replyToId,
+      audioAsVoice: normalized.audioAsVoice,
+      isError: normalized.isError,
+      isReasoning: normalized.isReasoning,
+    },
+  ];
 }
 
 export async function runEmbeddedPiAgent(
@@ -334,7 +367,6 @@ export async function runEmbeddedPiAgent(
         agentId: params.agentId,
         sessionKey: normalizedSessionKey,
       });
-      await ensureOpenClawModelsJson(params.config, agentDir);
       const resolvedSessionKey = normalizedSessionKey;
       const hookRunner = getGlobalHookRunner();
       const hookCtx = {
@@ -349,6 +381,27 @@ export async function runEmbeddedPiAgent(
         trigger: params.trigger,
         channelId: params.messageChannel ?? params.messageProvider ?? undefined,
       };
+      if (params.trigger === "cron" && hookRunner?.hasHooks("before_agent_reply")) {
+        const hookResult = await hookRunner.runBeforeAgentReply(
+          { cleanedBody: params.prompt },
+          hookCtx,
+        );
+        if (hookResult?.handled) {
+          return {
+            payloads: buildHandledReplyPayloads(hookResult.reply),
+            meta: {
+              durationMs: Date.now() - started,
+              agentMeta: {
+                sessionId: params.sessionId,
+                provider,
+                model: modelId,
+              },
+              finalAssistantVisibleText: hookResult.reply?.text ?? SILENT_REPLY_TOKEN,
+              finalAssistantRawText: hookResult.reply?.text ?? SILENT_REPLY_TOKEN,
+            },
+          };
+        }
+      }
 
       const hookSelection = await resolveHookModelSelection({
         prompt: params.prompt,
@@ -361,12 +414,28 @@ export async function runEmbeddedPiAgent(
       provider = hookSelection.provider;
       modelId = hookSelection.modelId;
       const legacyBeforeAgentStartResult = hookSelection.legacyBeforeAgentStartResult;
+      const agentHarness = selectAgentHarness({
+        provider,
+        modelId,
+        config: params.config,
+        agentId: params.agentId,
+        sessionKey: params.sessionKey,
+        agentHarnessId: params.agentHarnessId,
+      });
+      const pluginHarnessOwnsTransport = agentHarness.id !== "pi";
+      if (!pluginHarnessOwnsTransport) {
+        await ensureOpenClawModelsJson(params.config, agentDir);
+      }
 
       const { model, error, authStorage, modelRegistry } = await resolveModelAsync(
         provider,
         modelId,
         agentDir,
         params.config,
+        // Plugin harnesses may expose synthetic providers that PI cannot
+        // discover safely; resolve their model metadata without touching PI
+        // auth/model stores.
+        { skipPiDiscovery: pluginHarnessOwnsTransport },
       );
       if (!model) {
         throw new FailoverError(error ?? `Unknown model: ${provider}/${modelId}`, {
@@ -386,21 +455,44 @@ export async function runEmbeddedPiAgent(
       const ctxInfo = resolvedRuntimeModel.ctxInfo;
       let effectiveModel = resolvedRuntimeModel.effectiveModel;
 
-      const authStore = ensureAuthProfileStore(agentDir, {
-        allowKeychainPrompt: false,
-      });
+      const authStore = pluginHarnessOwnsTransport
+        ? createEmptyAuthProfileStore()
+        : ensureAuthProfileStore(agentDir, {
+            allowKeychainPrompt: false,
+          });
       const preferredProfileId = params.authProfileId?.trim();
       let lockedProfileId = params.authProfileIdSource === "user" ? preferredProfileId : undefined;
       if (lockedProfileId) {
-        const lockedProfile = authStore.profiles[lockedProfileId];
-        if (
-          !lockedProfile ||
-          normalizeProviderId(lockedProfile.provider) !== normalizeProviderId(provider)
-        ) {
-          lockedProfileId = undefined;
+        if (pluginHarnessOwnsTransport) {
+          const runtimeAuthPlan = buildAgentRuntimeAuthPlan({
+            provider,
+            authProfileProvider: lockedProfileId.split(":", 1)[0],
+            sessionAuthProfileId: lockedProfileId,
+            config: params.config,
+            workspaceDir: resolvedWorkspace,
+            harnessId: agentHarness.id,
+          });
+          if (!runtimeAuthPlan.forwardedAuthProfileId) {
+            lockedProfileId = undefined;
+          }
+        } else {
+          const lockedProfile = authStore.profiles[lockedProfileId];
+          const lockedProfileProvider = lockedProfile
+            ? resolveProviderIdForAuth(lockedProfile.provider, {
+                config: params.config,
+                workspaceDir: resolvedWorkspace,
+              })
+            : undefined;
+          const runProvider = resolveProviderIdForAuth(provider, {
+            config: params.config,
+            workspaceDir: resolvedWorkspace,
+          });
+          if (!lockedProfile || !lockedProfileProvider || lockedProfileProvider !== runProvider) {
+            lockedProfileId = undefined;
+          }
         }
       }
-      if (lockedProfileId) {
+      if (lockedProfileId && !pluginHarnessOwnsTransport) {
         const eligibility = resolveAuthProfileEligibility({
           cfg: params.config,
           store: authStore,
@@ -419,10 +511,35 @@ export async function runEmbeddedPiAgent(
             provider,
             preferredProfile: preferredProfileId,
           });
+      const providerPreferredProfileId = lockedProfileId
+        ? undefined
+        : resolveProviderAuthProfileId({
+            provider,
+            config: params.config,
+            workspaceDir: resolvedWorkspace,
+            context: {
+              config: params.config,
+              agentDir,
+              workspaceDir: resolvedWorkspace,
+              provider,
+              modelId,
+              preferredProfileId,
+              lockedProfileId,
+              profileOrder,
+              authStore,
+            },
+          });
+      const providerOrderedProfiles =
+        providerPreferredProfileId && profileOrder.includes(providerPreferredProfileId)
+          ? [
+              providerPreferredProfileId,
+              ...profileOrder.filter((profileId) => profileId !== providerPreferredProfileId),
+            ]
+          : profileOrder;
       const profileCandidates = lockedProfileId
         ? [lockedProfileId]
-        : profileOrder.length > 0
-          ? profileOrder
+        : providerOrderedProfiles.length > 0
+          ? providerOrderedProfiles
           : [undefined];
       let profileIndex = 0;
       const traceAttempts: TraceAttempt[] = [];
@@ -487,7 +604,14 @@ export async function runEmbeddedPiAgent(
         log,
       });
 
-      await initializeAuthProfile();
+      // Plugin harnesses own their model transport/auth. Running PI's generic
+      // auth bootstrap here can turn synthetic provider markers into real
+      // vendor-token refresh attempts before the plugin gets control.
+      if (!pluginHarnessOwnsTransport) {
+        await initializeAuthProfile();
+      } else if (lockedProfileId) {
+        lastProfileId = lockedProfileId;
+      }
       const { sessionAgentId } = resolveSessionAgentIds({
         sessionKey: params.sessionKey,
         config: params.config,
@@ -699,6 +823,7 @@ export async function runEmbeddedPiAgent(
                 sessionId: params.sessionId,
                 provider,
                 model: model.id,
+                contextTokens: ctxInfo.tokens,
                 usageAccumulator,
                 lastRunPromptUsage,
                 lastTurnTotal,
@@ -731,10 +856,31 @@ export async function runEmbeddedPiAgent(
           if (!runtimeAuthState && apiKeyInfo) {
             resolvedStreamApiKey = (apiKeyInfo as ApiKeyInfo).apiKey;
           }
+          const runtimePlan = buildAgentRuntimePlan({
+            provider,
+            modelId,
+            model: effectiveModel,
+            modelApi: effectiveModel.api,
+            harnessId: agentHarness.id,
+            harnessRuntime: agentHarness.id,
+            allowHarnessAuthProfileForwarding: pluginHarnessOwnsTransport,
+            authProfileProvider: lastProfileId?.split(":", 1)[0],
+            sessionAuthProfileId: lastProfileId,
+            config: params.config,
+            workspaceDir: resolvedWorkspace,
+            agentDir,
+            agentId: workspaceResolution.agentId,
+            thinkingLevel: thinkLevel,
+            extraParamsOverride: {
+              ...params.streamParams,
+              fastMode: params.fastMode,
+            },
+          });
 
           const attempt = await runEmbeddedAttemptWithBackend({
             sessionId: params.sessionId,
             sessionKey: resolvedSessionKey,
+            sandboxSessionKey: params.sandboxSessionKey,
             trigger: params.trigger,
             memoryFlushWritePath: params.memoryFlushWritePath,
             messageChannel: params.messageChannel,
@@ -767,12 +913,18 @@ export async function runEmbeddedPiAgent(
             contextTokenBudget: ctxInfo.tokens,
             skillsSnapshot: params.skillsSnapshot,
             prompt,
+            transcriptPrompt: params.transcriptPrompt,
             images: params.images,
             imageOrder: params.imageOrder,
             clientTools: params.clientTools,
             disableTools: params.disableTools,
             provider,
             modelId,
+            // Use the harness selected before model/auth setup for the actual
+            // attempt too. Otherwise plugin-owned transports can skip PI auth
+            // bootstrap but drift back to PI when the attempt is created.
+            agentHarnessId: agentHarness.id,
+            runtimePlan,
             model: applyAuthHeaderOverride(
               applyLocalNoAuthHeaderOverride(effectiveModel, apiKeyInfo),
               // When runtime auth exchange produced a different credential
@@ -1266,6 +1418,7 @@ export async function runEmbeddedPiAgent(
                   sessionId: sessionIdUsed,
                   provider,
                   model: model.id,
+                  contextTokens: ctxInfo.tokens,
                   usageAccumulator,
                   lastRunPromptUsage,
                   lastAssistant: sessionLastAssistant,
@@ -1321,6 +1474,7 @@ export async function runEmbeddedPiAgent(
                     sessionId: sessionIdUsed,
                     provider,
                     model: model.id,
+                    contextTokens: ctxInfo.tokens,
                     usageAccumulator,
                     lastRunPromptUsage,
                     lastAssistant: sessionLastAssistant,
@@ -1360,6 +1514,7 @@ export async function runEmbeddedPiAgent(
                     sessionId: sessionIdUsed,
                     provider,
                     model: model.id,
+                    contextTokens: ctxInfo.tokens,
                     usageAccumulator,
                     lastRunPromptUsage,
                     lastAssistant: sessionLastAssistant,
@@ -1671,6 +1826,8 @@ export async function runEmbeddedPiAgent(
             sessionId: sessionIdUsed,
             provider: sessionLastAssistant?.provider ?? provider,
             model: sessionLastAssistant?.model ?? model.id,
+            contextTokens: ctxInfo.tokens,
+            agentHarnessId: attempt.agentHarnessId,
             usage: usageMeta.usage,
             lastCallUsage: usageMeta.lastCallUsage,
             promptTokens: usageMeta.promptTokens,
@@ -1701,6 +1858,10 @@ export async function runEmbeddedPiAgent(
             payloads,
             toolMediaUrls: attempt.toolMediaUrls,
             toolAudioAsVoice: attempt.toolAudioAsVoice,
+          });
+          const attemptToolSummary = buildTraceToolSummary({
+            toolMetas: attempt.toolMetas,
+            hadFailure: Boolean(attempt.lastToolError),
           });
 
           // Timeout aborts can leave the run without any assistant payloads.
@@ -1741,6 +1902,8 @@ export async function runEmbeddedPiAgent(
                 finalAssistantRawText,
                 replayInvalid,
                 livenessState,
+                toolSummary: attemptToolSummary,
+                agentHarnessResultClassification: attempt.agentHarnessResultClassification,
               },
               didSendViaMessagingTool: attempt.didSendViaMessagingTool,
               didSendDeterministicApprovalPrompt: attempt.didSendDeterministicApprovalPrompt,
@@ -1755,6 +1918,7 @@ export async function runEmbeddedPiAgent(
           const nextPlanningOnlyRetryInstruction = resolvePlanningOnlyRetryInstruction({
             provider,
             modelId,
+            executionContract,
             prompt: params.prompt,
             aborted,
             timedOut,
@@ -1763,6 +1927,7 @@ export async function runEmbeddedPiAgent(
           const nextReasoningOnlyRetryInstruction = resolveReasoningOnlyRetryInstruction({
             provider: activeErrorContext.provider,
             modelId: activeErrorContext.model,
+            executionContract,
             aborted,
             timedOut,
             attempt,
@@ -1770,6 +1935,7 @@ export async function runEmbeddedPiAgent(
           const nextEmptyResponseRetryInstruction = resolveEmptyResponseRetryInstruction({
             provider: activeErrorContext.provider,
             modelId: activeErrorContext.model,
+            executionContract,
             payloadCount,
             aborted,
             timedOut,
@@ -1898,6 +2064,8 @@ export async function runEmbeddedPiAgent(
                 finalAssistantRawText,
                 replayInvalid,
                 livenessState,
+                toolSummary: attemptToolSummary,
+                agentHarnessResultClassification: attempt.agentHarnessResultClassification,
               },
               didSendViaMessagingTool: attempt.didSendViaMessagingTool,
               didSendDeterministicApprovalPrompt: attempt.didSendDeterministicApprovalPrompt,
@@ -1945,6 +2113,8 @@ export async function runEmbeddedPiAgent(
                 finalAssistantRawText,
                 replayInvalid,
                 livenessState,
+                toolSummary: attemptToolSummary,
+                agentHarnessResultClassification: attempt.agentHarnessResultClassification,
               },
               didSendViaMessagingTool: attempt.didSendViaMessagingTool,
               didSendDeterministicApprovalPrompt: attempt.didSendDeterministicApprovalPrompt,
@@ -2054,6 +2224,8 @@ export async function runEmbeddedPiAgent(
                 finalAssistantRawText,
                 replayInvalid,
                 livenessState,
+                toolSummary: attemptToolSummary,
+                agentHarnessResultClassification: attempt.agentHarnessResultClassification,
               },
               didSendViaMessagingTool: attempt.didSendViaMessagingTool,
               didSendDeterministicApprovalPrompt: attempt.didSendDeterministicApprovalPrompt,
@@ -2099,6 +2271,9 @@ export async function runEmbeddedPiAgent(
           });
           return {
             payloads: payloadsWithToolMedia?.length ? payloadsWithToolMedia : undefined,
+            ...(attempt.diagnosticTrace
+              ? { diagnosticTrace: freezeDiagnosticTraceContext(attempt.diagnosticTrace) }
+              : {}),
             meta: {
               durationMs: Date.now() - started,
               agentMeta,
@@ -2109,6 +2284,7 @@ export async function runEmbeddedPiAgent(
               finalAssistantRawText,
               replayInvalid,
               livenessState,
+              agentHarnessResultClassification: attempt.agentHarnessResultClassification,
               // Handle client tool calls (OpenResponses hosted tools)
               // Propagate the LLM stop reason so callers (lifecycle events,
               // ACP bridge) can distinguish end_turn from max_tokens.
@@ -2149,10 +2325,7 @@ export async function runEmbeddedPiAgent(
                 ...(params.verboseLevel ? { verbose: params.verboseLevel } : {}),
                 ...(params.blockReplyBreak ? { blockStreaming: params.blockReplyBreak } : {}),
               },
-              toolSummary: buildTraceToolSummary({
-                toolMetas: attempt.toolMetas,
-                hadFailure: Boolean(attempt.lastToolError),
-              }),
+              toolSummary: attemptToolSummary,
               completion: {
                 ...(stopReason ? { stopReason } : {}),
                 ...(stopReason ? { finishReason: stopReason } : {}),
@@ -2174,11 +2347,23 @@ export async function runEmbeddedPiAgent(
         await contextEngine.dispose?.();
         stopRuntimeAuthRefreshTimer();
         if (params.cleanupBundleMcpOnRunEnd === true) {
-          await disposeSessionMcpRuntime(params.sessionId).catch((error) => {
+          const onError = (error: unknown, sessionId: string) => {
             log.warn(
-              `bundle-mcp cleanup failed after run for ${params.sessionId}: ${formatErrorMessage(error)}`,
+              `bundle-mcp cleanup failed after run for ${sessionId}: ${formatErrorMessage(error)}`,
             );
+          };
+          const retiredBySessionKey = await retireSessionMcpRuntimeForSessionKey({
+            sessionKey: params.sessionKey,
+            reason: "embedded-run-end",
+            onError,
           });
+          if (!retiredBySessionKey) {
+            await retireSessionMcpRuntime({
+              sessionId: params.sessionId,
+              reason: "embedded-run-end",
+              onError,
+            });
+          }
         }
       }
     });

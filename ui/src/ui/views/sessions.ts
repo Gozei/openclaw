@@ -5,8 +5,10 @@ import { icons } from "../icons.ts";
 import { pathForTab } from "../navigation.ts";
 import { formatSessionTokens } from "../presenter.ts";
 import { normalizeLowercaseStringOrEmpty, normalizeOptionalString } from "../string-coerce.ts";
+import { normalizeThinkLevel } from "../thinking.ts";
 import type {
   GatewaySessionRow,
+  GatewayThinkingLevelOption,
   SessionCompactionCheckpoint,
   SessionsListResult,
 } from "../types.ts";
@@ -14,10 +16,6 @@ import type {
 export type SessionsProps = {
   loading: boolean;
   result: SessionsListResult | null;
-  agentsList: {
-    agents: Array<{ id: string; name?: string }>;
-    defaultId?: string;
-  } | null;
   error: string | null;
   activeMinutes: string;
   limit: string;
@@ -49,7 +47,6 @@ export type SessionsProps = {
   onPatch: (
     key: string,
     patch: {
-      agentId?: string | null;
       label?: string | null;
       thinkingLevel?: string | null;
       fastMode?: boolean | null;
@@ -68,8 +65,7 @@ export type SessionsProps = {
   onRestoreCheckpoint: (sessionKey: string, checkpointId: string) => void | Promise<void>;
 };
 
-const THINK_LEVELS = ["", "off", "minimal", "low", "medium", "high", "xhigh"] as const;
-const BINARY_THINK_LEVELS = ["", "off", "on"] as const;
+const DEFAULT_THINK_LEVELS = ["off", "minimal", "low", "medium", "high"] as const;
 const VERBOSE_LEVELS = [
   { value: "", label: "inherit" },
   { value: "off", label: "off (explicit)" },
@@ -84,23 +80,26 @@ const FAST_LEVELS = [
 const REASONING_LEVELS = ["", "off", "on", "stream"] as const;
 const PAGE_SIZES = [10, 25, 50, 100] as const;
 
-function normalizeProviderId(provider?: string | null): string {
-  if (!provider) {
-    return "";
-  }
-  const normalized = normalizeLowercaseStringOrEmpty(provider);
-  if (normalized === "z.ai" || normalized === "z-ai") {
-    return "zai";
-  }
-  return normalized;
+function normalizeThinkingOptionValue(raw: string): string {
+  return normalizeThinkLevel(raw) ?? normalizeLowercaseStringOrEmpty(raw);
 }
 
-function isBinaryThinkingProvider(provider?: string | null): boolean {
-  return normalizeProviderId(provider) === "zai";
-}
-
-function resolveThinkLevelOptions(provider?: string | null): readonly string[] {
-  return isBinaryThinkingProvider(provider) ? BINARY_THINK_LEVELS : THINK_LEVELS;
+function resolveThinkLevelOptions(
+  row: GatewaySessionRow,
+): readonly { value: string; label: string }[] {
+  const options: readonly GatewayThinkingLevelOption[] = row.thinkingLevels?.length
+    ? row.thinkingLevels
+    : (row.thinkingOptions?.length ? row.thinkingOptions : DEFAULT_THINK_LEVELS).map((label) => ({
+        id: normalizeThinkingOptionValue(label),
+        label,
+      }));
+  return [
+    { value: "", label: "inherit" },
+    ...options.map((option) => ({
+      value: normalizeThinkingOptionValue(option.id),
+      label: option.label,
+    })),
+  ];
 }
 
 function withCurrentOption(options: readonly string[], current: string): string[] {
@@ -126,25 +125,9 @@ function withCurrentLabeledOption(
   return [...options, { value: current, label: `${current} (custom)` }];
 }
 
-function resolveThinkLevelDisplay(value: string, isBinary: boolean): string {
-  if (!isBinary) {
-    return value;
-  }
-  if (!value || value === "off") {
-    return value;
-  }
-  return "on";
-}
-
-function resolveThinkLevelPatchValue(value: string, isBinary: boolean): string | null {
+function resolveThinkLevelPatchValue(value: string): string | null {
   if (!value) {
     return null;
-  }
-  if (!isBinary) {
-    return value;
-  }
-  if (value === "on") {
-    return "low";
   }
   return value;
 }
@@ -394,7 +377,6 @@ export function renderSessions(props: SessionsProps) {
                     : nothing}
                 </th>
                 ${sortHeader("key", "Key", "data-table-key-col")}
-                <th>Agent</th>
                 <th>Label</th>
                 ${sortHeader("kind", "Kind")} ${sortHeader("updated", "Updated")}
                 ${sortHeader("tokens", "Tokens")}
@@ -410,7 +392,7 @@ export function renderSessions(props: SessionsProps) {
                 ? html`
                     <tr>
                       <td
-                        colspan="12"
+                        colspan="11"
                         style="text-align: center; padding: 48px 16px; color: var(--muted)"
                       >
                         No sessions found.
@@ -459,9 +441,8 @@ export function renderSessions(props: SessionsProps) {
 function renderRows(row: GatewaySessionRow, props: SessionsProps) {
   const updated = row.updatedAt ? formatRelativeTimestamp(row.updatedAt) : t("common.na");
   const rawThinking = row.thinkingLevel ?? "";
-  const isBinaryThinking = isBinaryThinkingProvider(row.modelProvider);
-  const thinking = resolveThinkLevelDisplay(rawThinking, isBinaryThinking);
-  const thinkLevels = withCurrentOption(resolveThinkLevelOptions(row.modelProvider), thinking);
+  const thinking = rawThinking ? normalizeThinkingOptionValue(rawThinking) : "";
+  const thinkLevels = withCurrentLabeledOption(resolveThinkLevelOptions(row), thinking);
   const fastMode = row.fastMode === true ? "on" : row.fastMode === false ? "off" : "";
   const fastLevels = withCurrentLabeledOption(FAST_LEVELS, fastMode);
   const verbose = row.verboseLevel ?? "";
@@ -475,9 +456,6 @@ function renderRows(row: GatewaySessionRow, props: SessionsProps) {
   const checkpointError = props.checkpointErrorByKey[row.key];
   const displayName = normalizeOptionalString(row.displayName) ?? null;
   const trimmedLabel = normalizeOptionalString(row.label) ?? "";
-  const effectiveAgentId =
-    normalizeOptionalString(row.agentId) ?? props.agentsList?.defaultId ?? "main";
-  const agentOverrideId = normalizeOptionalString(row.agentOverrideId) ?? "";
   const showDisplayName = Boolean(
     displayName && displayName !== row.key && displayName !== trimmedLabel,
   );
@@ -535,26 +513,6 @@ function renderRows(row: GatewaySessionRow, props: SessionsProps) {
         </div>
       </td>
       <td>
-        <select
-          ?disabled=${props.loading || row.kind === "global"}
-          style="padding: 6px 10px; font-size: 13px; border: 1px solid var(--border); border-radius: var(--radius-sm); min-width: 120px; max-width: 180px;"
-          @change=${(e: Event) => {
-            const value = normalizeOptionalString((e.target as HTMLSelectElement).value) ?? null;
-            props.onPatch(row.key, { agentId: value });
-          }}
-        >
-          <option value="" ?selected=${agentOverrideId === ""}>
-            ${props.agentsList?.defaultId ? `default (${props.agentsList.defaultId})` : "default"}
-          </option>
-          ${(props.agentsList?.agents ?? []).map(
-            (agent) => html`<option value=${agent.id} ?selected=${agentOverrideId === agent.id}>
-              ${agent.name && agent.name !== agent.id ? `${agent.name} (${agent.id})` : agent.id}
-              ${effectiveAgentId === agent.id && agentOverrideId === "" ? " [effective]" : ""}
-            </option>`,
-          )}
-        </select>
-      </td>
-      <td>
         <input
           .value=${row.label ?? ""}
           ?disabled=${props.loading}
@@ -602,14 +560,14 @@ function renderRows(row: GatewaySessionRow, props: SessionsProps) {
           @change=${(e: Event) => {
             const value = (e.target as HTMLSelectElement).value;
             props.onPatch(row.key, {
-              thinkingLevel: resolveThinkLevelPatchValue(value, isBinaryThinking),
+              thinkingLevel: resolveThinkLevelPatchValue(value),
             });
           }}
         >
           ${thinkLevels.map(
             (level) =>
-              html`<option value=${level} ?selected=${thinking === level}>
-                ${level || "inherit"}
+              html`<option value=${level.value} ?selected=${thinking === level.value}>
+                ${level.label}
               </option>`,
           )}
         </select>
@@ -669,7 +627,7 @@ function renderRows(row: GatewaySessionRow, props: SessionsProps) {
     ...(isExpanded
       ? [
           html`<tr>
-            <td colspan="12" style="padding: 0;">
+            <td colspan="11" style="padding: 0;">
               <div
                 style="padding: 14px 16px; border-top: 1px solid var(--border); background: var(--surface-2, rgba(127, 127, 127, 0.05));"
               >

@@ -107,6 +107,7 @@ export function resolveGatewayAttachmentMaxBytes(cfg?: {
 }
 
 const OFFLOAD_THRESHOLD_BYTES = 2_000_000;
+const TEXT_ONLY_OFFLOAD_LIMIT = 10;
 
 const MIME_TO_EXT: Record<string, string> = {
   "image/jpeg": ".jpg",
@@ -464,16 +465,19 @@ export async function parseMessageWithAttachments(
         normalizeMime(mime) ??
         mime;
       const finalKind = mediaKindFromMime(finalMime);
-      log?.info?.(
-        `attachment ${label}: parsed ${formatAttachmentMimeDecision({
-          label,
-          providedMime,
-          sniffedMime,
-          finalMime,
-          finalKind,
-          sizeBytes,
-        })}`,
-      );
+      const shouldForceOffload = finalKind === "image" && opts?.supportsImages === false;
+      if (!shouldForceOffload) {
+        log?.info?.(
+          `attachment ${label}: parsed ${formatAttachmentMimeDecision({
+            label,
+            providedMime,
+            sniffedMime,
+            finalMime,
+            finalKind,
+            sizeBytes,
+          })}`,
+        );
+      }
 
       if (!finalKind || isArchiveMime(finalMime)) {
         log?.warn(`attachment ${label}: unsupported attachment type (${finalMime || "unknown"})`);
@@ -491,9 +495,18 @@ export async function parseMessageWithAttachments(
       }
 
       let isOffloaded = false;
-      const shouldInlineImage = finalKind === "image" && opts?.supportsImages !== false;
+      const shouldInlineImage = finalKind === "image" && !shouldForceOffload;
 
-      if (!shouldInlineImage) {
+      if (shouldForceOffload && offloadedRefs.length >= TEXT_ONLY_OFFLOAD_LIMIT) {
+        log?.warn(
+          `attachment ${label}: dropping image because text-only offload limit ` +
+            `${TEXT_ONLY_OFFLOAD_LIMIT} was reached`,
+        );
+        updatedMessage += "\n[image attachment omitted: text-only attachment limit reached]";
+        continue;
+      }
+
+      if (!shouldInlineImage && !shouldForceOffload) {
         const savedAttachment = await saveAttachmentToMediaStore({
           label,
           mimeType: finalMime,
@@ -509,10 +522,17 @@ export async function parseMessageWithAttachments(
         continue;
       }
 
-      if (sizeBytes > OFFLOAD_THRESHOLD_BYTES) {
+      if (shouldForceOffload || sizeBytes > OFFLOAD_THRESHOLD_BYTES) {
         const isSupportedForOffload = SUPPORTED_OFFLOAD_MIMES.has(finalMime);
 
         if (!isSupportedForOffload) {
+          if (shouldForceOffload) {
+            log?.warn(
+              `attachment ${label}: format ${finalMime} cannot be offloaded for ` +
+                "text-only model, dropping",
+            );
+            continue;
+          }
           // Passing this inline would reintroduce the OOM risk this PR prevents.
           throw new Error(
             `attachment ${label}: format ${finalMime} is too large to pass inline ` +
@@ -550,7 +570,11 @@ export async function parseMessageWithAttachments(
           const mediaRef = `media://inbound/${savedMedia.id}`;
 
           updatedMessage += `\n[media attached: ${mediaRef}]`;
-          log?.info?.(`[Gateway] Intercepted large image payload. Saved: ${mediaRef}`);
+          log?.info?.(
+            shouldForceOffload
+              ? `[Gateway] Offloaded image for text-only model. Saved: ${mediaRef}`
+              : `[Gateway] Intercepted large image payload. Saved: ${mediaRef}`,
+          );
 
           // Record for transcript metadata — separate from `images` because
           // these are not passed inline to the model.

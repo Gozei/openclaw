@@ -292,6 +292,7 @@ export function shouldRetryWithDeviceToken(params: DeviceTokenRetryDecision): bo
 export class GatewayBrowserClient {
   private ws: WebSocket | null = null;
   private pending = new Map<string, Pending>();
+  private eventListeners = new Set<(evt: GatewayEventFrame) => void>();
   private closed = false;
   private lastSeq: number | null = null;
   private lastTick: number | null = null;
@@ -333,6 +334,13 @@ export class GatewayBrowserClient {
 
   get connected() {
     return this.ws?.readyState === WebSocket.OPEN;
+  }
+
+  addEventListener(listener: (evt: GatewayEventFrame) => void): () => void {
+    this.eventListeners.add(listener);
+    return () => {
+      this.eventListeners.delete(listener);
+    };
   }
 
   private connect() {
@@ -576,6 +584,13 @@ export class GatewayBrowserClient {
         this.opts.onEvent?.(evt);
       } catch (err) {
         console.error("[gateway] event handler error:", err);
+      }
+      for (const listener of this.eventListeners) {
+        try {
+          listener(evt);
+        } catch (err) {
+          console.error("[gateway] event listener error:", err);
+        }
       }
       return;
     }

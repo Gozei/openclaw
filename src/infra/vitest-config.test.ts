@@ -198,6 +198,12 @@ describe("base vitest config", () => {
     expect(baseConfig.test?.pool).toBe("threads");
   });
 
+  it("lets OPENCLAW_VITEST_POOL override the base pool for local diagnostics", () => {
+    expect(resolveDefaultVitestPool({ OPENCLAW_VITEST_POOL: "forks" })).toBe("forks");
+    expect(resolveDefaultVitestPool({ OPENCLAW_VITEST_POOL: "threads" })).toBe("threads");
+    expect(resolveDefaultVitestPool({ OPENCLAW_VITEST_POOL: "bogus" })).toBe("threads");
+  });
+
   it("excludes fixture trees from test collection", () => {
     expect(baseConfig.test?.exclude).toContain("test/fixtures/**");
   });

@@ -29,7 +29,6 @@ function buildProps(result: SessionsListResult): SessionsProps {
   return {
     loading: false,
     result,
-    agentsList: null,
     error: null,
     activeMinutes: "",
     limit: "120",
@@ -66,55 +65,85 @@ function buildProps(result: SessionsListResult): SessionsProps {
 }
 
 describe("sessions view", () => {
-  it("renders verbose=full without falling back to inherit", async () => {
+  it("renders and patches provider-owned thinking ids", async () => {
     const container = document.createElement("div");
+    const onPatch = vi.fn();
     render(
-      renderSessions(
-        buildProps(
+      renderSessions({
+        ...buildProps(
           buildResult({
             key: "agent:main:main",
             kind: "direct",
             updatedAt: Date.now(),
-            verboseLevel: "full",
+            thinkingLevel: "adaptive",
+            thinkingLevels: [
+              { id: "off", label: "off" },
+              { id: "adaptive", label: "adaptive" },
+              { id: "max", label: "maximum" },
+            ],
           }),
         ),
-      ),
+        onPatch,
+      }),
       container,
     );
     await Promise.resolve();
 
-    const selects = container.querySelectorAll("select");
-    const verbose = selects[3] as HTMLSelectElement | undefined;
-    expect(verbose?.value).toBe("full");
-    expect(Array.from(verbose?.options ?? []).some((option) => option.value === "full")).toBe(true);
-  });
-
-  it("keeps unknown stored values selectable instead of forcing inherit", async () => {
-    const container = document.createElement("div");
-    render(
-      renderSessions(
-        buildProps(
-          buildResult({
-            key: "agent:main:main",
-            kind: "direct",
-            updatedAt: Date.now(),
-            reasoningLevel: "custom-mode",
-          }),
-        ),
-      ),
-      container,
-    );
-    await Promise.resolve();
-
-    const selects = container.querySelectorAll("select");
-    const reasoning = selects[4] as HTMLSelectElement | undefined;
-    expect(reasoning?.value).toBe("custom-mode");
+    const thinking = container.querySelector("tbody select") as HTMLSelectElement | null;
+    expect(thinking?.value).toBe("adaptive");
+    expect(Array.from(thinking?.options ?? []).map((option) => option.value)).toEqual([
+      "",
+      "off",
+      "adaptive",
+      "max",
+    ]);
     expect(
-      Array.from(reasoning?.options ?? []).some((option) => option.value === "custom-mode"),
-    ).toBe(true);
+      Array.from(thinking?.options ?? [])
+        .find((option) => option.value === "max")
+        ?.textContent?.trim(),
+    ).toBe("maximum");
+
+    thinking!.value = "max";
+    thinking!.dispatchEvent(new Event("change", { bubbles: true }));
+
+    expect(onPatch).toHaveBeenCalledWith("agent:main:main", { thinkingLevel: "max" });
   });
 
-  it("renders explicit fast mode without falling back to inherit", async () => {
+  it("keeps legacy binary thinking labels patching canonical ids", async () => {
+    const container = document.createElement("div");
+    const onPatch = vi.fn();
+    render(
+      renderSessions({
+        ...buildProps(
+          buildResult({
+            key: "agent:main:main",
+            kind: "direct",
+            updatedAt: Date.now(),
+            thinkingLevel: "low",
+            thinkingOptions: ["off", "on"],
+          }),
+        ),
+        onPatch,
+      }),
+      container,
+    );
+    await Promise.resolve();
+
+    const thinking = container.querySelector("tbody select") as HTMLSelectElement | null;
+    expect(thinking?.value).toBe("low");
+    expect(
+      Array.from(thinking?.options ?? [])
+        .find((option) => option.value === "low")
+        ?.textContent?.trim(),
+    ).toBe("on");
+
+    thinking!.value = "low";
+    thinking!.dispatchEvent(new Event("change", { bubbles: true }));
+
+    expect(onPatch).toHaveBeenCalledWith("agent:main:main", { thinkingLevel: "low" });
+  });
+
+  it("keeps session selects stable and deselects only the current page", async () => {
     const container = document.createElement("div");
     render(
       renderSessions(
@@ -124,6 +153,8 @@ describe("sessions view", () => {
             kind: "direct",
             updatedAt: Date.now(),
             fastMode: true,
+            verboseLevel: "full",
+            reasoningLevel: "custom-mode",
           }),
         ),
       ),
@@ -132,15 +163,20 @@ describe("sessions view", () => {
     await Promise.resolve();
 
     const selects = container.querySelectorAll("select");
-    const fast = selects[2] as HTMLSelectElement | undefined;
+    const fast = selects[1] as HTMLSelectElement | undefined;
+    const verbose = selects[2] as HTMLSelectElement | undefined;
+    const reasoning = selects[3] as HTMLSelectElement | undefined;
     expect(fast?.value).toBe("on");
-  });
+    expect(verbose?.value).toBe("full");
+    expect(Array.from(verbose?.options ?? []).some((option) => option.value === "full")).toBe(true);
+    expect(reasoning?.value).toBe("custom-mode");
+    expect(
+      Array.from(reasoning?.options ?? []).some((option) => option.value === "custom-mode"),
+    ).toBe(true);
 
-  it("deselects only the current page from the header checkbox", async () => {
     const onSelectPage = vi.fn();
     const onDeselectPage = vi.fn();
     const onDeselectAll = vi.fn();
-    const container = document.createElement("div");
     render(
       renderSessions({
         ...buildProps(
@@ -173,42 +209,5 @@ describe("sessions view", () => {
     expect(onDeselectPage).toHaveBeenCalledWith(["page-0"]);
     expect(onDeselectAll).not.toHaveBeenCalled();
     expect(onSelectPage).not.toHaveBeenCalled();
-  });
-
-  it("renders the session agent override selector and reports explicit overrides", async () => {
-    const onPatch = vi.fn();
-    const container = document.createElement("div");
-    render(
-      renderSessions({
-        ...buildProps(
-          buildResult({
-            key: "agent:main:main",
-            kind: "direct",
-            updatedAt: Date.now(),
-            agentId: "ops",
-            agentOverrideId: "ops",
-          }),
-        ),
-        agentsList: {
-          defaultId: "main",
-          agents: [
-            { id: "main", name: "Main" },
-            { id: "ops", name: "Ops" },
-          ],
-        },
-        onPatch,
-      }),
-      container,
-    );
-    await Promise.resolve();
-
-    const selects = container.querySelectorAll("select");
-    const agentSelect = selects[0] as HTMLSelectElement | undefined;
-    expect(agentSelect?.value).toBe("ops");
-
-    agentSelect!.value = "";
-    agentSelect!.dispatchEvent(new Event("change", { bubbles: true }));
-
-    expect(onPatch).toHaveBeenCalledWith("agent:main:main", { agentId: null });
   });
 });

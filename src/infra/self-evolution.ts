@@ -302,10 +302,10 @@ function parseTestOutput(stdout: string, stderr: string, durationMs: number): Te
   const failedMatch = output.match(/(\d+)\s+failed/);
   const skippedMatch = output.match(/(\d+)\s+skipped/);
 
-  const total = parseInt(totalMatch?.[1] || "0");
-  const passed = parseInt(passedMatch?.[1] || "0");
-  const failed = parseInt(failedMatch?.[1] || "0");
-  const skipped = parseInt(skippedMatch?.[1] || "0");
+  const total = Number.parseInt(totalMatch?.[1] || "0", 10);
+  const passed = Number.parseInt(passedMatch?.[1] || "0", 10);
+  const failed = Number.parseInt(failedMatch?.[1] || "0", 10);
+  const skipped = Number.parseInt(skippedMatch?.[1] || "0", 10);
 
   const status: "passed" | "failed" = failed > 0 ? "failed" : "passed";
 
@@ -441,7 +441,7 @@ async function checkPerformance(_config: SelfEvolutionConfig): Promise<Performan
 
     // 磁盘使用
     const { stdout: diskOutput } = await execAsync("du -sm . 2>/dev/null || echo '0'");
-    const diskUsageMB = parseInt(diskOutput) || 0;
+    const diskUsageMB = Number.parseInt(diskOutput, 10) || 0;
 
     // 测试执行时间（从上一次测试结果获取）
     const testExecutionTimeMs = 0; // 将在主流程中设置
