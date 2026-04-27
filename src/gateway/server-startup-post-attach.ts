@@ -47,6 +47,31 @@ import { STARTUP_UNAVAILABLE_GATEWAY_METHODS } from "./server-startup-unavailabl
 import { startGatewayTailscaleExposure } from "./server-tailscale.js";
 
 const SESSION_LOCK_STALE_MS = 30 * 60 * 1000;
+const STARTUP_MAINTENANCE_DELAY_MS = 1000;
+
+function scheduleStartupMaintenance(task: () => void, delayMs = STARTUP_MAINTENANCE_DELAY_MS): void {
+  const timer = setTimeout(task, delayMs);
+  timer.unref?.();
+}
+
+async function cleanupStaleSessionLocks(params: {
+  log: { warn: (msg: string) => void };
+}): Promise<void> {
+  try {
+    const stateDir = resolveStateDir(process.env);
+    const sessionDirs = await resolveAgentSessionDirs(stateDir);
+    for (const sessionsDir of sessionDirs) {
+      await cleanStaleLockFiles({
+        sessionsDir,
+        staleMs: SESSION_LOCK_STALE_MS,
+        removeStale: true,
+        log: { warn: (message) => params.log.warn(message) },
+      });
+    }
+  } catch (err) {
+    params.log.warn(`session lock cleanup failed after startup: ${String(err)}`);
+  }
+}
 
 async function prewarmConfiguredPrimaryModel(params: {
   cfg: OpenClawConfig;
@@ -102,21 +127,6 @@ export async function startGatewaySidecars(params: {
   };
   logChannels: { info: (msg: string) => void; error: (msg: string) => void };
 }) {
-  try {
-    const stateDir = resolveStateDir(process.env);
-    const sessionDirs = await resolveAgentSessionDirs(stateDir);
-    for (const sessionsDir of sessionDirs) {
-      await cleanStaleLockFiles({
-        sessionsDir,
-        staleMs: SESSION_LOCK_STALE_MS,
-        removeStale: true,
-        log: { warn: (message) => params.log.warn(message) },
-      });
-    }
-  } catch (err) {
-    params.log.warn(`session lock cleanup failed on startup: ${String(err)}`);
-  }
-
   await startGmailWatcherWithLogs({
     cfg: params.cfg,
     log: params.logHooks,
@@ -223,8 +233,10 @@ export async function startGatewaySidecars(params: {
       });
   }
 
-  void startGatewayMemoryBackend({ cfg: params.cfg, log: params.log }).catch((err) => {
-    params.log.warn(`qmd memory startup initialization failed: ${String(err)}`);
+  scheduleStartupMaintenance(() => {
+    void startGatewayMemoryBackend({ cfg: params.cfg, log: params.log }).catch((err) => {
+      params.log.warn(`qmd memory startup initialization failed: ${String(err)}`);
+    });
   });
 
   if (shouldWakeFromRestartSentinel()) {
@@ -234,6 +246,10 @@ export async function startGatewaySidecars(params: {
   }
 
   scheduleSubagentOrphanRecovery();
+
+  scheduleStartupMaintenance(() => {
+    void cleanupStaleSessionLocks({ log: params.log });
+  });
 
   return { pluginServices };
 }
@@ -360,5 +376,6 @@ export async function startGatewayPostAttachRuntime(
 }
 
 export const __testing = {
+  cleanupStaleSessionLocks,
   prewarmConfiguredPrimaryModel,
 };

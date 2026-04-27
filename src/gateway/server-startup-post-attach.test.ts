@@ -1,10 +1,14 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const hoisted = vi.hoisted(() => {
   const startPluginServices = vi.fn(async () => null);
   const startGmailWatcherWithLogs = vi.fn(async () => undefined);
   const loadInternalHooks = vi.fn(async () => 0);
   const setInternalHooksEnabled = vi.fn();
+  const resolveAgentSessionDirs = vi.fn(async () => [
+    "C:\\Users\\tester\\.openclaw\\agents\\main\\sessions",
+  ]);
+  const cleanStaleLockFiles = vi.fn(async () => undefined);
   const startGatewayMemoryBackend = vi.fn(async () => undefined);
   const scheduleGatewayUpdateCheck = vi.fn(() => () => {});
   const startGatewayTailscaleExposure = vi.fn(async () => null);
@@ -22,6 +26,8 @@ const hoisted = vi.hoisted(() => {
     startGmailWatcherWithLogs,
     loadInternalHooks,
     setInternalHooksEnabled,
+    resolveAgentSessionDirs,
+    cleanStaleLockFiles,
     startGatewayMemoryBackend,
     scheduleGatewayUpdateCheck,
     startGatewayTailscaleExposure,
@@ -34,11 +40,11 @@ const hoisted = vi.hoisted(() => {
 });
 
 vi.mock("../agents/session-dirs.js", () => ({
-  resolveAgentSessionDirs: vi.fn(async () => []),
+  resolveAgentSessionDirs: hoisted.resolveAgentSessionDirs,
 }));
 
 vi.mock("../agents/session-write-lock.js", () => ({
-  cleanStaleLockFiles: vi.fn(async () => undefined),
+  cleanStaleLockFiles: hoisted.cleanStaleLockFiles,
 }));
 
 vi.mock("../agents/subagent-registry.js", () => ({
@@ -49,10 +55,10 @@ vi.mock("../config/paths.js", async () => {
   const actual = await vi.importActual<typeof import("../config/paths.js")>("../config/paths.js");
   return {
     ...actual,
-    STATE_DIR: "/tmp/openclaw-state",
-    resolveConfigPath: vi.fn(() => "/tmp/openclaw-state/openclaw.json"),
+    STATE_DIR: "C:\\Users\\tester\\.openclaw",
+    resolveConfigPath: vi.fn(() => "C:\\Users\\tester\\.openclaw\\openclaw.json"),
     resolveGatewayPort: vi.fn(() => 18789),
-    resolveStateDir: vi.fn(() => "/tmp/openclaw-state"),
+    resolveStateDir: vi.fn(() => "C:\\Users\\tester\\.openclaw"),
   };
 });
 
@@ -105,7 +111,8 @@ vi.mock("./server-tailscale.js", () => ({
   startGatewayTailscaleExposure: hoisted.startGatewayTailscaleExposure,
 }));
 
-const { startGatewayPostAttachRuntime } = await import("./server-startup-post-attach.js");
+const { startGatewayPostAttachRuntime, startGatewaySidecars } =
+  await import("./server-startup-post-attach.js");
 const { STARTUP_UNAVAILABLE_GATEWAY_METHODS } =
   await import("./server-startup-unavailable-methods.js");
 
@@ -114,10 +121,16 @@ type PostAttachRuntimeDeps = NonNullable<Parameters<typeof startGatewayPostAttac
 
 describe("startGatewayPostAttachRuntime", () => {
   beforeEach(() => {
+    vi.useRealTimers();
     hoisted.startPluginServices.mockClear();
     hoisted.startGmailWatcherWithLogs.mockClear();
     hoisted.loadInternalHooks.mockClear();
     hoisted.setInternalHooksEnabled.mockClear();
+    hoisted.resolveAgentSessionDirs.mockClear();
+    hoisted.resolveAgentSessionDirs.mockResolvedValue([
+      "C:\\Users\\tester\\.openclaw\\agents\\main\\sessions",
+    ]);
+    hoisted.cleanStaleLockFiles.mockClear();
     hoisted.startGatewayMemoryBackend.mockClear();
     hoisted.scheduleGatewayUpdateCheck.mockClear();
     hoisted.startGatewayTailscaleExposure.mockClear();
@@ -180,6 +193,62 @@ describe("startGatewayPostAttachRuntime", () => {
   });
 });
 
+describe("startGatewaySidecars", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    hoisted.startPluginServices.mockClear();
+    hoisted.startGmailWatcherWithLogs.mockClear();
+    hoisted.loadInternalHooks.mockClear();
+    hoisted.setInternalHooksEnabled.mockClear();
+    hoisted.resolveAgentSessionDirs.mockClear();
+    hoisted.resolveAgentSessionDirs.mockResolvedValue([
+      "C:\\Users\\tester\\.openclaw\\agents\\main\\sessions",
+    ]);
+    hoisted.cleanStaleLockFiles.mockClear();
+    hoisted.startGatewayMemoryBackend.mockClear();
+    hoisted.scheduleSubagentOrphanRecovery.mockClear();
+    hoisted.shouldWakeFromRestartSentinel.mockReturnValue(false);
+    hoisted.reconcilePendingSessionIdentities.mockClear();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("schedules session lock cleanup after sidecars return", async () => {
+    await startGatewaySidecars(createSidecarParams());
+
+    expect(hoisted.resolveAgentSessionDirs).not.toHaveBeenCalled();
+    expect(hoisted.cleanStaleLockFiles).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(hoisted.resolveAgentSessionDirs).toHaveBeenCalledWith("C:\\Users\\tester\\.openclaw");
+    expect(hoisted.cleanStaleLockFiles).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionsDir: "C:\\Users\\tester\\.openclaw\\agents\\main\\sessions",
+        staleMs: 30 * 60 * 1000,
+        removeStale: true,
+      }),
+    );
+  });
+
+  it("defers memory backend startup until after sidecars return", async () => {
+    await startGatewaySidecars(createSidecarParams());
+
+    expect(hoisted.startGatewayMemoryBackend).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(hoisted.startGatewayMemoryBackend).toHaveBeenCalledTimes(1);
+    expect(hoisted.startGatewayMemoryBackend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cfg: expect.objectContaining({ hooks: { internal: { enabled: false } } }),
+      }),
+    );
+  });
+});
+
 function createPostAttachRuntimeDeps(
   overrides: Partial<PostAttachRuntimeDeps> = {},
 ): PostAttachRuntimeDeps {
@@ -234,6 +303,29 @@ function createPostAttachParams(overrides: Partial<PostAttachParams> = {}): Post
       error: vi.fn(),
     },
     unavailableGatewayMethods: new Set<string>(),
+    ...overrides,
+  };
+}
+
+type SidecarParams = Parameters<typeof startGatewaySidecars>[0];
+
+function createSidecarParams(overrides: Partial<SidecarParams> = {}): SidecarParams {
+  return {
+    cfg: { hooks: { internal: { enabled: false } } } as never,
+    pluginRegistry: { plugins: [] } as never,
+    defaultWorkspaceDir: "/tmp/openclaw-workspace",
+    deps: {} as never,
+    startChannels: vi.fn(async () => undefined),
+    log: { warn: vi.fn() },
+    logHooks: {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    },
+    logChannels: {
+      info: vi.fn(),
+      error: vi.fn(),
+    },
     ...overrides,
   };
 }
