@@ -236,8 +236,11 @@
 - For the repo's end-to-end maintainer PR workflow, use `$openclaw-pr-maintainer` at `.agents/skills/openclaw-pr-maintainer/SKILL.md`.
 
 - `/landpr` lives in the global Codex prompts (`~/.codex/prompts/landpr.md`); when landing or merging any PR, always follow that `/landpr` process.
-- Create commits with `scripts/committer "<msg>" <file...>`; avoid manual `git add`/`git commit` so staging stays scoped.
-- Follow concise, action-oriented commit messages (e.g., `CLI: add verbose flag to send`).
+- Follow the ClawX-style Git workflow in `GIT_WORKFLOW.md`.
+- Create commits with `scripts/committer "<type>: <short summary>" <file...>`; avoid manual `git add`/`git commit` so staging stays scoped.
+- Commit messages and PR titles use `<type>: <short summary>` (for example, `docs: update git workflow guidelines`).
+- Use the same type set for branches, commits, and PR titles: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`, `build`, `ci`, `poc`, and `hotfix`.
+- Working branches should use `<developer-name>/<type>/<short-description>`; the first segment is the developer's name, such as `tommy`, `gozei`, or `jiahe`.
 - Group related changes; avoid bundling unrelated refactors.
 - PR submission template (canonical): `.github/pull_request_template.md`
 - Issue submission templates (canonical): `.github/ISSUE_TEMPLATE/`
