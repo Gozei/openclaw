@@ -225,7 +225,9 @@ async function runSmoke(options: SmokeOptions): Promise<SmokeSummary> {
       repeatedFailures: latestDay.repeatedFailures ?? 0,
       ruleProposalCount: ruleFiles.length,
       workflowCount: workflows.reduce((sum, entry) => sum + (entry.count ?? 0), 0),
-      reportExists: reportText.includes(`# Evolution Report ${dateStamp}`),
+      reportExists:
+        reportText.includes(`# 进化报告 ${dateStamp}`) ||
+        reportText.includes(`# Evolution Report ${dateStamp}`),
     },
     files: {
       dailyPath,

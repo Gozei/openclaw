@@ -1,4 +1,3 @@
-import { applyPreviewTheme } from "@create-markdown/preview";
 import DOMPurify from "dompurify";
 import { html, nothing } from "lit";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
@@ -22,6 +21,11 @@ import type {
 import { type AgentContext } from "./agents-utils.ts";
 import type { AgentsPanel } from "./agents.types.ts";
 import { resolveChannelExtras as resolveChannelExtrasFromConfig } from "./channel-config-extras.ts";
+
+function renderSafeMarkdownPreview(markdown: string): string {
+  const rendered = marked.parse(markdown, { gfm: true, breaks: true }) as string;
+  return DOMPurify.sanitize(rendered);
+}
 
 function renderAgentContextCard(
   context: AgentContext,
@@ -532,12 +536,9 @@ export function renderAgentFiles(params: {
                           </div>
                         </div>
                         <div class="md-preview-dialog__body">
-                          ${unsafeHTML(
-                            applyPreviewTheme(
-                              marked.parse(draft, { gfm: true, breaks: true }) as string,
-                              { sanitize: (h: string) => DOMPurify.sanitize(h) },
-                            ),
-                          )}
+                          <div class="cm-preview">
+                            ${unsafeHTML(renderSafeMarkdownPreview(draft))}
+                          </div>
                         </div>
                       </div>
                     </dialog>
