@@ -119,32 +119,6 @@ const buildPiCatalogFixture = (): PiCatalogFixtureEntry[] => [
   },
 ];
 
-const expectedSortedCatalog = (): ModelCatalogRpcEntry[] => [
-  {
-    id: "claude-test-a",
-    name: "A-Model",
-    provider: "anthropic",
-    contextWindow: 200_000,
-  },
-  {
-    id: "claude-test-b",
-    name: "B-Model",
-    provider: "anthropic",
-    contextWindow: 1000,
-  },
-  {
-    id: "gpt-test-a",
-    name: "A-Model",
-    provider: "openai",
-    contextWindow: 8000,
-  },
-  {
-    id: "gpt-test-z",
-    name: "gpt-test-z",
-    provider: "openai",
-  },
-];
-
 describe("gateway server models + voicewake", () => {
   const listModels = async () => rpcReq<{ models: ModelCatalogRpcEntry[] }>(ws, "models.list");
 
@@ -304,7 +278,7 @@ describe("gateway server models + voicewake", () => {
     });
   });
 
-  test("models.list returns model catalog", async () => {
+  test("models.list hides unconfigured built-in catalog models by default", async () => {
     seedPiCatalog();
 
     const res1 = await listModels();
@@ -314,9 +288,43 @@ describe("gateway server models + voicewake", () => {
     expect(res2.ok).toBe(true);
 
     const models = res1.payload?.models ?? [];
-    expect(models).toEqual(expectedSortedCatalog());
+    expect(models).toEqual([]);
 
     expect(piSdkMock.discoverCalls).toBe(1);
+  });
+
+  test("models.list returns explicitly configured models when no allowlist is set", async () => {
+    await withModelsConfig(
+      {
+        models: {
+          providers: {
+            openai: {
+              baseUrl: "https://openai.example.com",
+              models: [
+                {
+                  id: "gpt-test-z",
+                  name: "Configured GPT Test Z",
+                  contextWindow: 64_000,
+                },
+              ],
+            },
+          },
+        },
+      },
+      async () => {
+        seedPiCatalog();
+        const res = await listModels();
+        expect(res.ok).toBe(true);
+        expect(res.payload?.models).toEqual([
+          {
+            id: "gpt-test-z",
+            name: "Configured GPT Test Z",
+            provider: "openai",
+            contextWindow: 64_000,
+          },
+        ]);
+      },
+    );
   });
 
   test("models.list filters to allowlisted configured models by default", async () => {
