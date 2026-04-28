@@ -156,6 +156,7 @@ export const uk: TranslationMap = {
     usage: "Використання",
     cron: "Завдання Cron",
     skills: "Навички",
+    memory: "记忆.进化",
     nodes: "Вузли",
     chat: "Чат",
     config: "Конфігурація",
@@ -178,6 +179,8 @@ export const uk: TranslationMap = {
     usage: "Використання API та витрати.",
     cron: "Пробудження та повторювані запуски.",
     skills: "Навички та API-ключі.",
+    memory:
+      "Dreaming turns experience into memory; evolution turns memory into better future behavior.",
     nodes: "Спарені пристрої та команди.",
     chat: "Чат шлюзу для швидких втручань.",
     config: "Редагування openclaw.json.",
@@ -454,6 +457,39 @@ export const uk: TranslationMap = {
     lastSeen: "Last seen: {time}",
     workaround: "Workaround: {text}",
     created: "Created: {time}",
+  },
+  memoryEvolution: {
+    tabs: {
+      overview: "Overview",
+      dreaming: "Dreaming",
+      lessons: "Lessons",
+    },
+    title: "记忆.进化",
+    subtitle:
+      "Dreaming turns experience into memory. Evolution turns memory into better future behavior.",
+    dreamingCardTitle: "Dreaming",
+    dreamingCardBody:
+      "Consolidates short-term traces, promotes durable memories, and keeps the dream diary readable.",
+    evolutionCardTitle: "Evolution",
+    evolutionCardBody:
+      "Turns completed work into lessons, repeated-failure rules, reusable workflows, and generated skills.",
+    recallCardTitle: "Recall",
+    recallCardBody:
+      "Relevant dreams, workflows, failures, and generated skills are surfaced before similar future runs.",
+    health: {
+      dreamingOn: "Dreaming on",
+      dreamingOff: "Dreaming off",
+      evolutionOn: "Evolution on",
+      evolutionOff: "Evolution off",
+    },
+    metrics: {
+      shortTerm: "Short-term memories",
+      signals: "Memory signals",
+      promoted: "Promoted today",
+      cycles: "Evolution cycles",
+      reusableWorkflows: "Reusable workflows",
+      generatedSkills: "Generated skills",
+    },
   },
   usage: {
     page: {

@@ -59,7 +59,7 @@ describe("titleForTab", () => {
     expect(titleForTab("chat")).toBe("Chat");
     expect(titleForTab("overview")).toBe("Overview");
     expect(titleForTab("cron")).toBe("Cron Jobs");
-    expect(titleForTab("evolution")).toBe("进化");
+    expect(titleForTab("memory")).toBe("记忆.进化");
   });
 });
 
@@ -131,9 +131,10 @@ describe("tabFromPath", () => {
     expect(tabFromPath("/chat")).toBe("chat");
     expect(tabFromPath("/overview")).toBe("overview");
     expect(tabFromPath("/sessions")).toBe("sessions");
-    expect(tabFromPath("/dreaming")).toBe("dreams");
-    expect(tabFromPath("/dreams")).toBe("dreams");
-    expect(tabFromPath("/evolution")).toBe("evolution");
+    expect(tabFromPath("/memory")).toBe("memory");
+    expect(tabFromPath("/dreaming")).toBe("memory");
+    expect(tabFromPath("/dreams")).toBe("memory");
+    expect(tabFromPath("/evolution")).toBe("memory");
   });
 
   it("returns chat for root path", () => {
@@ -163,6 +164,7 @@ describe("inferBasePathFromPathname", () => {
   it("returns empty string for direct tab path", () => {
     expect(inferBasePathFromPathname("/chat")).toBe("");
     expect(inferBasePathFromPathname("/overview")).toBe("");
+    expect(inferBasePathFromPathname("/memory")).toBe("");
     expect(inferBasePathFromPathname("/dreaming")).toBe("");
     expect(inferBasePathFromPathname("/dreams")).toBe("");
     expect(inferBasePathFromPathname("/evolution")).toBe("");

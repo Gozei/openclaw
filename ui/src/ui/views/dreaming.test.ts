@@ -201,8 +201,8 @@ describe("dreaming view", () => {
   it("renders the active dream scene chrome and status", () => {
     const container = renderInto(buildProps({ dreamingOf: "reindexing old chats\u2026" }));
 
-    const svg = container.querySelector(".dreams__lobster svg");
-    expect(svg).not.toBeNull();
+    const logo = container.querySelector<HTMLImageElement>(".dreams__lobster img");
+    expect(logo?.getAttribute("src")).toBe("favicon.svg");
 
     const zs = container.querySelectorAll(".dreams__z");
     expect(zs.length).toBe(3);

@@ -157,6 +157,7 @@ export const tr: TranslationMap = {
     usage: "Kullanım",
     cron: "Cron İşleri",
     skills: "Skills",
+    memory: "记忆.进化",
     nodes: "Düğümler",
     chat: "Sohbet",
     config: "Yapılandırma",
@@ -179,6 +180,8 @@ export const tr: TranslationMap = {
     usage: "API kullanımı ve maliyetler.",
     cron: "Uyandırmalar ve yinelenen çalıştırmalar.",
     skills: "Skills ve API anahtarları.",
+    memory:
+      "Dreaming turns experience into memory; evolution turns memory into better future behavior.",
     nodes: "Eşleştirilmiş cihazlar ve komutlar.",
     chat: "Hızlı müdahaleler için Gateway sohbeti.",
     config: "openclaw.json dosyasını düzenleyin.",
@@ -454,6 +457,39 @@ export const tr: TranslationMap = {
     lastSeen: "Last seen: {time}",
     workaround: "Workaround: {text}",
     created: "Created: {time}",
+  },
+  memoryEvolution: {
+    tabs: {
+      overview: "Overview",
+      dreaming: "Dreaming",
+      lessons: "Lessons",
+    },
+    title: "记忆.进化",
+    subtitle:
+      "Dreaming turns experience into memory. Evolution turns memory into better future behavior.",
+    dreamingCardTitle: "Dreaming",
+    dreamingCardBody:
+      "Consolidates short-term traces, promotes durable memories, and keeps the dream diary readable.",
+    evolutionCardTitle: "Evolution",
+    evolutionCardBody:
+      "Turns completed work into lessons, repeated-failure rules, reusable workflows, and generated skills.",
+    recallCardTitle: "Recall",
+    recallCardBody:
+      "Relevant dreams, workflows, failures, and generated skills are surfaced before similar future runs.",
+    health: {
+      dreamingOn: "Dreaming on",
+      dreamingOff: "Dreaming off",
+      evolutionOn: "Evolution on",
+      evolutionOff: "Evolution off",
+    },
+    metrics: {
+      shortTerm: "Short-term memories",
+      signals: "Memory signals",
+      promoted: "Promoted today",
+      cycles: "Evolution cycles",
+      reusableWorkflows: "Reusable workflows",
+      generatedSkills: "Generated skills",
+    },
   },
   usage: {
     page: {

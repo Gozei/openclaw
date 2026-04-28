@@ -154,6 +154,7 @@ export const th: TranslationMap = {
     usage: "การใช้งาน",
     cron: "งาน Cron",
     skills: "ทักษะ",
+    memory: "记忆.进化",
     nodes: "โหนด",
     chat: "แชต",
     config: "Config",
@@ -165,6 +166,7 @@ export const th: TranslationMap = {
     debug: "ดีบัก",
     logs: "บันทึก",
     dreams: "การฝัน",
+    evolution: "进化",
   },
   subtitles: {
     agents: "เวิร์กสเปซ เครื่องมือ และข้อมูลประจำตัว",
@@ -175,6 +177,8 @@ export const th: TranslationMap = {
     usage: "การใช้งาน API และค่าใช้จ่าย",
     cron: "การปลุกและการทำงานตามรอบ",
     skills: "ทักษะและคีย์ API",
+    memory:
+      "Dreaming turns experience into memory; evolution turns memory into better future behavior.",
     nodes: "อุปกรณ์ที่จับคู่และคำสั่ง",
     chat: "แชตเกตเวย์สำหรับการดำเนินการอย่างรวดเร็ว",
     config: "แก้ไข openclaw.json",
@@ -186,6 +190,7 @@ export const th: TranslationMap = {
     debug: "สแนปช็อต เหตุการณ์ และ RPC",
     logs: "บันทึกเกตเวย์แบบสด",
     dreams: "การฝันของหน่วยความจำ การรวมข้อมูล และการสะท้อนคิด",
+    evolution: "Metrics, lessons, and promotions for 进化.",
   },
   overview: {
     access: {
@@ -407,6 +412,70 @@ export const th: TranslationMap = {
       nurturingInsights: "กำลังบ่มเพาะความเข้าใจที่เพิ่งก่อตัว…",
       simmeringIdeas: "กำลังเคี่ยวความคิดที่ยังไม่เป็นรูปเป็นร่าง…",
       whisperingVectorStore: "กำลังกระซิบกับ vector store…",
+    },
+  },
+  evolutionView: {
+    title: "进化",
+    subtitle: "Summaries, promotions, and proof that the agent improved after work.",
+    workspace: "Workspace: {path}",
+    enabledHint:
+      "进化 is enabled. Send a chat turn, then refresh this tab to watch the counters and promotions move.",
+    disabledHint:
+      "进化 is disabled in config. Existing artifacts may still be visible, but new turns will not promote lessons until it is re-enabled.",
+    emptyHint: "No 进化 data yet. Run a task or send a chat turn, then refresh.",
+    noDataYet: "No data yet.",
+    summaryRepeatFailuresTitle: "Repeat Failures",
+    summaryRepeatFailuresEmpty: "No repeat failures recorded yet.",
+    summaryReusableWorkflowsTitle: "Reusable Workflows",
+    summaryReusableWorkflowsEmpty: "No workflow reuse recorded yet.",
+    latestDailyMemory: "Latest Daily Memory",
+    latestReport: "Latest 进化 Report",
+    ruleProposals: "Rule Proposals",
+    skillProposals: "Skill Proposals",
+    noProposalsYet: "No proposals yet.",
+    cycles: "Cycles",
+    successes: "Successes",
+    failures: "Failures",
+    repeatedFailures: "Repeated failures",
+    appliedRules: "Applied rules",
+    appliedSkills: "Applied skills",
+    candidates: "Candidates: {count}",
+    count: "Count: {count}",
+    lastSeen: "Last seen: {time}",
+    workaround: "Workaround: {text}",
+    created: "Created: {time}",
+  },
+  memoryEvolution: {
+    tabs: {
+      overview: "Overview",
+      dreaming: "Dreaming",
+      lessons: "Lessons",
+    },
+    title: "记忆.进化",
+    subtitle:
+      "Dreaming turns experience into memory. Evolution turns memory into better future behavior.",
+    dreamingCardTitle: "Dreaming",
+    dreamingCardBody:
+      "Consolidates short-term traces, promotes durable memories, and keeps the dream diary readable.",
+    evolutionCardTitle: "Evolution",
+    evolutionCardBody:
+      "Turns completed work into lessons, repeated-failure rules, reusable workflows, and generated skills.",
+    recallCardTitle: "Recall",
+    recallCardBody:
+      "Relevant dreams, workflows, failures, and generated skills are surfaced before similar future runs.",
+    health: {
+      dreamingOn: "Dreaming on",
+      dreamingOff: "Dreaming off",
+      evolutionOn: "Evolution on",
+      evolutionOff: "Evolution off",
+    },
+    metrics: {
+      shortTerm: "Short-term memories",
+      signals: "Memory signals",
+      promoted: "Promoted today",
+      cycles: "Evolution cycles",
+      reusableWorkflows: "Reusable workflows",
+      generatedSkills: "Generated skills",
     },
   },
   usage: {

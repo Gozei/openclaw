@@ -155,6 +155,7 @@ export const pt_BR: TranslationMap = {
     usage: "Uso",
     cron: "Tarefas Cron",
     skills: "Habilidades",
+    memory: "记忆.进化",
     nodes: "Nós",
     chat: "Chat",
     config: "Configuração",
@@ -177,6 +178,8 @@ export const pt_BR: TranslationMap = {
     usage: "Uso e custos da API.",
     cron: "Despertares e execuções.",
     skills: "Habilidades e chaves API.",
+    memory:
+      "Dreaming turns experience into memory; evolution turns memory into better future behavior.",
     nodes: "Dispositivos e comandos.",
     chat: "Chat do gateway para intervenções rápidas.",
     config: "Editar openclaw.json.",
@@ -450,6 +453,39 @@ export const pt_BR: TranslationMap = {
     lastSeen: "Last seen: {time}",
     workaround: "Workaround: {text}",
     created: "Created: {time}",
+  },
+  memoryEvolution: {
+    tabs: {
+      overview: "Overview",
+      dreaming: "Dreaming",
+      lessons: "Lessons",
+    },
+    title: "记忆.进化",
+    subtitle:
+      "Dreaming turns experience into memory. Evolution turns memory into better future behavior.",
+    dreamingCardTitle: "Dreaming",
+    dreamingCardBody:
+      "Consolidates short-term traces, promotes durable memories, and keeps the dream diary readable.",
+    evolutionCardTitle: "Evolution",
+    evolutionCardBody:
+      "Turns completed work into lessons, repeated-failure rules, reusable workflows, and generated skills.",
+    recallCardTitle: "Recall",
+    recallCardBody:
+      "Relevant dreams, workflows, failures, and generated skills are surfaced before similar future runs.",
+    health: {
+      dreamingOn: "Dreaming on",
+      dreamingOff: "Dreaming off",
+      evolutionOn: "Evolution on",
+      evolutionOff: "Evolution off",
+    },
+    metrics: {
+      shortTerm: "Short-term memories",
+      signals: "Memory signals",
+      promoted: "Promoted today",
+      cycles: "Evolution cycles",
+      reusableWorkflows: "Reusable workflows",
+      generatedSkills: "Generated skills",
+    },
   },
   usage: {
     page: {

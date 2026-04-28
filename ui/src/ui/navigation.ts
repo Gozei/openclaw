@@ -8,7 +8,7 @@ export const TAB_GROUPS = [
     label: "control",
     tabs: ["overview", "sessions", "usage", "cron"],
   },
-  { label: "agent", tabs: ["agents", "skills", "evolution", "dreams", "nodes"] },
+  { label: "agent", tabs: ["agents", "skills", "nodes", "memory"] },
   {
     label: "settings",
     tabs: [
@@ -35,6 +35,7 @@ export type Tab =
   | "usage"
   | "cron"
   | "skills"
+  | "memory"
   | "nodes"
   | "chat"
   | "config"
@@ -57,6 +58,7 @@ const TAB_PATHS: Record<Tab, string> = {
   usage: "/usage",
   cron: "/cron",
   skills: "/skills",
+  memory: "/memory",
   nodes: "/nodes",
   chat: "/chat",
   config: "/config",
@@ -72,7 +74,9 @@ const TAB_PATHS: Record<Tab, string> = {
 };
 
 const PATH_ALIASES: Record<string, Tab> = {
-  "/dreams": "dreams",
+  "/dreaming": "memory",
+  "/dreams": "memory",
+  "/evolution": "memory",
 };
 
 const PATH_TO_TAB = new Map<string, Tab>([
@@ -179,6 +183,8 @@ export function iconForTab(tab: Tab): IconName {
       return "loader";
     case "skills":
       return "zap";
+    case "memory":
+      return "brain";
     case "nodes":
       return "monitor";
     case "config":

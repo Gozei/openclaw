@@ -385,6 +385,16 @@ export async function refreshActiveTab(host: SettingsHost) {
         loadWikiMemoryPalace(app),
       ]);
       return;
+    case "memory":
+      await loadConfig(app);
+      await Promise.all([
+        loadDreamingStatus(app),
+        loadDreamDiary(app),
+        loadWikiImportInsights(app),
+        loadWikiMemoryPalace(app),
+        loadEvolutionStatus(app),
+      ]);
+      return;
     case "evolution":
       await loadEvolutionStatus(app);
       return;

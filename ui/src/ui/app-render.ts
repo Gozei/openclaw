@@ -84,6 +84,7 @@ import {
   resolveConfiguredDreaming,
   updateDreamingEnabled,
 } from "./controllers/dreaming.ts";
+import { loadEvolutionStatus } from "./controllers/evolution.ts";
 import {
   loadExecApprovals,
   removeExecApprovalsFormValue,
@@ -150,6 +151,7 @@ import { renderDreaming } from "./views/dreaming.ts";
 import { renderExecApprovalPrompt } from "./views/exec-approval.ts";
 import { renderGatewayUrlConfirmation } from "./views/gateway-url-confirmation.ts";
 import { renderLoginGate } from "./views/login-gate.ts";
+import { renderMemoryEvolution, type MemoryEvolutionTab } from "./views/memory-evolution.ts";
 import { renderOverview } from "./views/overview.ts";
 
 // Lazy-loaded view modules – deferred so the initial bundle stays small.
@@ -184,6 +186,7 @@ const lazyLogs = createLazy(() => import("./views/logs.ts"));
 const lazyNodes = createLazy(() => import("./views/nodes.ts"));
 const lazySessions = createLazy(() => import("./views/sessions.ts"));
 const lazySkills = createLazy(() => import("./views/skills.ts"));
+let memoryEvolutionTab: MemoryEvolutionTab = "overview";
 
 function formatDreamNextCycle(nextRunAtMs: number | undefined): string | null {
   if (typeof nextRunAtMs !== "number" || !Number.isFinite(nextRunAtMs)) {
@@ -750,6 +753,82 @@ export function renderApp(state: AppViewState) {
       await loadConfig(state);
       await loadDreamingStatus(state);
     })();
+  };
+  const refreshMemoryEvolution = () => {
+    void (async () => {
+      await loadConfig(state);
+      await Promise.all([
+        loadDreamingStatus(state),
+        loadDreamDiary(state),
+        loadWikiImportInsights(state),
+        loadWikiMemoryPalace(state),
+        loadEvolutionStatus(state),
+      ]);
+    })();
+  };
+  const dreamingProps = {
+    basePath: state.basePath ?? "",
+    active: dreamingOn,
+    shortTermCount: state.dreamingStatus?.shortTermCount ?? 0,
+    groundedSignalCount: state.dreamingStatus?.groundedSignalCount ?? 0,
+    totalSignalCount: state.dreamingStatus?.totalSignalCount ?? 0,
+    promotedCount: state.dreamingStatus?.promotedToday ?? 0,
+    phases: state.dreamingStatus?.phases ?? undefined,
+    shortTermEntries: state.dreamingStatus?.shortTermEntries ?? [],
+    promotedEntries: state.dreamingStatus?.promotedEntries ?? [],
+    dreamingOf: null,
+    nextCycle: dreamingNextCycle,
+    timezone: state.dreamingStatus?.timezone ?? null,
+    statusLoading: state.dreamingStatusLoading,
+    statusError: state.dreamingStatusError,
+    modeSaving: state.dreamingModeSaving,
+    dreamDiaryLoading: state.dreamDiaryLoading,
+    dreamDiaryActionLoading: state.dreamDiaryActionLoading,
+    dreamDiaryActionMessage: state.dreamDiaryActionMessage,
+    dreamDiaryActionArchivePath: state.dreamDiaryActionArchivePath,
+    dreamDiaryError: state.dreamDiaryError,
+    dreamDiaryPath: state.dreamDiaryPath,
+    dreamDiaryContent: state.dreamDiaryContent,
+    memoryWikiEnabled: isPluginEnabledInConfigSnapshot(state.configSnapshot, "memory-wiki", {
+      enabledByDefault: false,
+    }),
+    wikiImportInsightsLoading: state.wikiImportInsightsLoading,
+    wikiImportInsightsError: state.wikiImportInsightsError,
+    wikiImportInsights: state.wikiImportInsights,
+    wikiMemoryPalaceLoading: state.wikiMemoryPalaceLoading,
+    wikiMemoryPalaceError: state.wikiMemoryPalaceError,
+    wikiMemoryPalace: state.wikiMemoryPalace,
+    onRefresh: refreshDreaming,
+    onRefreshDiary: () => loadDreamDiary(state),
+    onRefreshImports: () => {
+      void (async () => {
+        await loadConfig(state);
+        await loadWikiImportInsights(state);
+      })();
+    },
+    onRefreshMemoryPalace: () => {
+      void (async () => {
+        await loadConfig(state);
+        await loadWikiMemoryPalace(state);
+      })();
+    },
+    onOpenConfig: () => openConfigFile(state),
+    onOpenWikiPage: (lookup: string) => openWikiPage(lookup),
+    onBackfillDiary: () => backfillDreamDiary(state),
+    onCopyDreamingArchivePath: () => {
+      void copyDreamingArchivePath(state);
+    },
+    onDedupeDreamDiary: () => dedupeDreamDiary(state),
+    onResetDiary: () => resetDreamDiary(state),
+    onResetGroundedShortTerm: () => resetGroundedShortTerm(state),
+    onRepairDreamingArtifacts: () => repairDreamingArtifacts(state),
+    onRequestUpdate: requestHostUpdate,
+  };
+  const evolutionProps = {
+    loading: state.evolutionLoading,
+    error: state.evolutionError,
+    status: state.evolutionStatus,
+    onRefresh: () => loadEvolutionStatus(state),
   };
   const basePath = normalizeBasePath(state.basePath ?? "");
   const resolveSelectedAgentId = () =>
@@ -1442,15 +1521,19 @@ export function renderApp(state: AppViewState) {
                 ${isChat ? nothing : html`<div class="page-sub">${subtitleForTab(state.tab)}</div>`}
               </div>
               <div class="page-meta">
-                ${state.tab === "dreams"
+                ${state.tab === "memory" || state.tab === "dreams"
                   ? html`
                       <div class="dreaming-header-controls">
                         <button
                           class="btn btn--subtle btn--sm"
-                          ?disabled=${dreamingLoading || state.dreamDiaryLoading}
-                          @click=${refreshDreaming}
+                          ?disabled=${dreamingLoading ||
+                          state.dreamDiaryLoading ||
+                          state.evolutionLoading}
+                          @click=${state.tab === "memory"
+                            ? refreshMemoryEvolution
+                            : refreshDreaming}
                         >
-                          ${dreamingRefreshLoading
+                          ${dreamingRefreshLoading || state.evolutionLoading
                             ? t("dreaming.header.refreshing")
                             : t("dreaming.header.refresh")}
                         </button>
@@ -2386,67 +2469,19 @@ export function renderApp(state: AppViewState) {
               }),
             )
           : nothing}
-        ${state.tab === "dreams"
-          ? renderDreaming({
-              active: dreamingOn,
-              shortTermCount: state.dreamingStatus?.shortTermCount ?? 0,
-              groundedSignalCount: state.dreamingStatus?.groundedSignalCount ?? 0,
-              totalSignalCount: state.dreamingStatus?.totalSignalCount ?? 0,
-              promotedCount: state.dreamingStatus?.promotedToday ?? 0,
-              phases: state.dreamingStatus?.phases ?? undefined,
-              shortTermEntries: state.dreamingStatus?.shortTermEntries ?? [],
-              promotedEntries: state.dreamingStatus?.promotedEntries ?? [],
-              dreamingOf: null,
-              nextCycle: dreamingNextCycle,
-              timezone: state.dreamingStatus?.timezone ?? null,
-              statusLoading: state.dreamingStatusLoading,
-              statusError: state.dreamingStatusError,
-              modeSaving: state.dreamingModeSaving,
-              dreamDiaryLoading: state.dreamDiaryLoading,
-              dreamDiaryActionLoading: state.dreamDiaryActionLoading,
-              dreamDiaryActionMessage: state.dreamDiaryActionMessage,
-              dreamDiaryActionArchivePath: state.dreamDiaryActionArchivePath,
-              dreamDiaryError: state.dreamDiaryError,
-              dreamDiaryPath: state.dreamDiaryPath,
-              dreamDiaryContent: state.dreamDiaryContent,
-              memoryWikiEnabled: isPluginEnabledInConfigSnapshot(
-                state.configSnapshot,
-                "memory-wiki",
-                { enabledByDefault: false },
-              ),
-              wikiImportInsightsLoading: state.wikiImportInsightsLoading,
-              wikiImportInsightsError: state.wikiImportInsightsError,
-              wikiImportInsights: state.wikiImportInsights,
-              wikiMemoryPalaceLoading: state.wikiMemoryPalaceLoading,
-              wikiMemoryPalaceError: state.wikiMemoryPalaceError,
-              wikiMemoryPalace: state.wikiMemoryPalace,
-              onRefresh: refreshDreaming,
-              onRefreshDiary: () => loadDreamDiary(state),
-              onRefreshImports: () => {
-                void (async () => {
-                  await loadConfig(state);
-                  await loadWikiImportInsights(state);
-                })();
+        ${state.tab === "memory"
+          ? renderMemoryEvolution({
+              activeTab: memoryEvolutionTab,
+              dreaming: dreamingProps,
+              evolution: evolutionProps,
+              onTabChange: (tab) => {
+                memoryEvolutionTab = tab;
+                requestHostUpdate?.();
               },
-              onRefreshMemoryPalace: () => {
-                void (async () => {
-                  await loadConfig(state);
-                  await loadWikiMemoryPalace(state);
-                })();
-              },
-              onOpenConfig: () => openConfigFile(state),
-              onOpenWikiPage: (lookup: string) => openWikiPage(lookup),
-              onBackfillDiary: () => backfillDreamDiary(state),
-              onCopyDreamingArchivePath: () => {
-                void copyDreamingArchivePath(state);
-              },
-              onDedupeDreamDiary: () => dedupeDreamDiary(state),
-              onResetDiary: () => resetDreamDiary(state),
-              onResetGroundedShortTerm: () => resetGroundedShortTerm(state),
-              onRepairDreamingArtifacts: () => repairDreamingArtifacts(state),
-              onRequestUpdate: requestHostUpdate,
             })
-          : nothing}
+          : state.tab === "dreams"
+            ? renderDreaming(dreamingProps)
+            : nothing}
       </main>
       ${renderExecApprovalPrompt(state)} ${renderGatewayUrlConfirmation(state)} ${nothing}
     </div>
