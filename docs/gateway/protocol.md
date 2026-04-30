@@ -325,6 +325,9 @@ implemented in `src/gateway/server-methods/*.ts`.
   and preview the reload plan without writing; pass
   `restartPolicy: "confirm-required"` to reject changes that require a Gateway,
   channel, or component restart until the caller has explicit user confirmation.
+  Use `restartPolicy: "gateway-restart-confirm-required"` to allow hot and
+  component reloads but reject full Gateway process restarts until explicitly
+  confirmed.
 - `config.apply` validates + replaces the full config payload. It supports the
   same `dryRun` and `restartPolicy` controls as `config.patch`.
 - `config.schema` returns the live config schema payload used by Control UI and

@@ -51,12 +51,7 @@ function isConfigReloadPlan(value: unknown): value is ConfigReloadPlan {
 }
 
 function reloadPlanNeedsConfirmation(plan: ConfigReloadPlan): boolean {
-  return (
-    plan.requiresRestart === true ||
-    plan.requiresGatewayRestart === true ||
-    plan.effect === "component-restart" ||
-    plan.effect === "gateway-restart"
-  );
+  return plan.requiresGatewayRestart === true || plan.effect === "gateway-restart";
 }
 
 function formatReloadPlanForConfirmation(plan: ConfigReloadPlan): string {
@@ -223,7 +218,7 @@ async function submitConfigChange(
     await state.client.request(method, {
       raw,
       baseHash,
-      restartPolicy: restartConfirmed ? "auto" : "confirm-required",
+      restartPolicy: restartConfirmed ? "auto" : "gateway-restart-confirm-required",
       ...extraParams,
     });
     state.configFormDirty = false;

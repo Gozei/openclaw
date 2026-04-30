@@ -1747,6 +1747,7 @@ public struct SessionsAbortParams: Codable, Sendable {
 
 public struct SessionsPatchParams: Codable, Sendable {
     public let key: String
+    public let agentid: AnyCodable?
     public let label: AnyCodable?
     public let thinkinglevel: AnyCodable?
     public let fastmode: AnyCodable?
@@ -1770,6 +1771,7 @@ public struct SessionsPatchParams: Codable, Sendable {
 
     public init(
         key: String,
+        agentid: AnyCodable?,
         label: AnyCodable?,
         thinkinglevel: AnyCodable?,
         fastmode: AnyCodable?,
@@ -1792,6 +1794,7 @@ public struct SessionsPatchParams: Codable, Sendable {
         groupactivation: AnyCodable?)
     {
         self.key = key
+        self.agentid = agentid
         self.label = label
         self.thinkinglevel = thinkinglevel
         self.fastmode = fastmode
@@ -1816,6 +1819,7 @@ public struct SessionsPatchParams: Codable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case key
+        case agentid = "agentId"
         case label
         case thinkinglevel = "thinkingLevel"
         case fastmode = "fastMode"
@@ -1940,24 +1944,34 @@ public struct ConfigGetParams: Codable, Sendable {}
 public struct ConfigSetParams: Codable, Sendable {
     public let raw: String
     public let basehash: String?
+    public let dryrun: Bool?
+    public let restartpolicy: AnyCodable?
 
     public init(
         raw: String,
-        basehash: String?)
+        basehash: String?,
+        dryrun: Bool?,
+        restartpolicy: AnyCodable?)
     {
         self.raw = raw
         self.basehash = basehash
+        self.dryrun = dryrun
+        self.restartpolicy = restartpolicy
     }
 
     private enum CodingKeys: String, CodingKey {
         case raw
         case basehash = "baseHash"
+        case dryrun = "dryRun"
+        case restartpolicy = "restartPolicy"
     }
 }
 
 public struct ConfigApplyParams: Codable, Sendable {
     public let raw: String
     public let basehash: String?
+    public let dryrun: Bool?
+    public let restartpolicy: AnyCodable?
     public let sessionkey: String?
     public let deliverycontext: [String: AnyCodable]?
     public let note: String?
@@ -1966,6 +1980,8 @@ public struct ConfigApplyParams: Codable, Sendable {
     public init(
         raw: String,
         basehash: String?,
+        dryrun: Bool?,
+        restartpolicy: AnyCodable?,
         sessionkey: String?,
         deliverycontext: [String: AnyCodable]?,
         note: String?,
@@ -1973,6 +1989,8 @@ public struct ConfigApplyParams: Codable, Sendable {
     {
         self.raw = raw
         self.basehash = basehash
+        self.dryrun = dryrun
+        self.restartpolicy = restartpolicy
         self.sessionkey = sessionkey
         self.deliverycontext = deliverycontext
         self.note = note
@@ -1982,6 +2000,8 @@ public struct ConfigApplyParams: Codable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case raw
         case basehash = "baseHash"
+        case dryrun = "dryRun"
+        case restartpolicy = "restartPolicy"
         case sessionkey = "sessionKey"
         case deliverycontext = "deliveryContext"
         case note
@@ -1992,6 +2012,8 @@ public struct ConfigApplyParams: Codable, Sendable {
 public struct ConfigPatchParams: Codable, Sendable {
     public let raw: String
     public let basehash: String?
+    public let dryrun: Bool?
+    public let restartpolicy: AnyCodable?
     public let sessionkey: String?
     public let deliverycontext: [String: AnyCodable]?
     public let note: String?
@@ -2000,6 +2022,8 @@ public struct ConfigPatchParams: Codable, Sendable {
     public init(
         raw: String,
         basehash: String?,
+        dryrun: Bool?,
+        restartpolicy: AnyCodable?,
         sessionkey: String?,
         deliverycontext: [String: AnyCodable]?,
         note: String?,
@@ -2007,6 +2031,8 @@ public struct ConfigPatchParams: Codable, Sendable {
     {
         self.raw = raw
         self.basehash = basehash
+        self.dryrun = dryrun
+        self.restartpolicy = restartpolicy
         self.sessionkey = sessionkey
         self.deliverycontext = deliverycontext
         self.note = note
@@ -2016,6 +2042,8 @@ public struct ConfigPatchParams: Codable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case raw
         case basehash = "baseHash"
+        case dryrun = "dryRun"
+        case restartpolicy = "restartPolicy"
         case sessionkey = "sessionKey"
         case deliverycontext = "deliveryContext"
         case note
@@ -3031,7 +3059,19 @@ public struct ModelChoice: Codable, Sendable {
     }
 }
 
-public struct ModelsListParams: Codable, Sendable {}
+public struct ModelsListParams: Codable, Sendable {
+    public let configuredonly: Bool?
+
+    public init(
+        configuredonly: Bool?)
+    {
+        self.configuredonly = configuredonly
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case configuredonly = "configuredOnly"
+    }
+}
 
 public struct ModelsListResult: Codable, Sendable {
     public let models: [ModelChoice]

@@ -102,7 +102,7 @@ locale picker lives in the Gateway Access card, not under Appearance.
 - Nodes: list + caps (`node.list`)
 - Exec approvals: edit gateway or node allowlists + ask policy for `exec host=gateway/node` (`exec.approvals.*`)
 - Config: view/edit `~/.openclaw/openclaw.json` (`config.get`, `config.set`)
-- Config: apply + restart with validation (`config.apply`) and wake the last active session
+- Config: apply with validation (`config.apply`), hot/component reload when possible, and full Gateway restart confirmation only when required
 - Config writes include a base-hash guard to prevent clobbering concurrent edits
 - Config writes (`config.set`/`config.apply`/`config.patch`) also preflight active SecretRef resolution for refs in the submitted config payload; unresolved active submitted refs are rejected before write
 - Config schema + form rendering (`config.schema` / `config.schema.lookup`,

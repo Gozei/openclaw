@@ -423,7 +423,10 @@ describe("saveAgentsConfig", () => {
     expect(request).toHaveBeenNthCalledWith(
       2,
       "config.set",
-      expect.objectContaining({ baseHash: "hash-1", restartPolicy: "confirm-required" }),
+      expect.objectContaining({
+        baseHash: "hash-1",
+        restartPolicy: "gateway-restart-confirm-required",
+      }),
     );
     expect(request).toHaveBeenNthCalledWith(3, "config.get", {});
     expect(request).toHaveBeenNthCalledWith(4, "agents.list", {});

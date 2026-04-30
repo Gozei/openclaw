@@ -267,6 +267,39 @@ describe("config shared auth disconnects", () => {
     );
   });
 
+  it("rejects config.patch Gateway restarts under gateway-only confirmation policy", async () => {
+    readConfigFileSnapshotForWriteMock.mockResolvedValue(createConfigWriteSnapshot({}));
+
+    const { options, respond } = createConfigHandlerHarness({
+      method: "config.patch",
+      params: {
+        baseHash: "base-hash",
+        raw: JSON.stringify({ gateway: { port: 19001 } }),
+        restartPolicy: "gateway-restart-confirm-required",
+      },
+    });
+
+    await configHandlers["config.patch"](options);
+
+    expect(writeConfigFileMock).not.toHaveBeenCalled();
+    expect(scheduleGatewaySigusr1RestartMock).not.toHaveBeenCalled();
+    expect(respond).toHaveBeenCalledWith(
+      false,
+      undefined,
+      expect.objectContaining({
+        code: "INVALID_REQUEST",
+        message: expect.stringContaining("requires Gateway restart"),
+        details: {
+          reloadPlan: expect.objectContaining({
+            effect: "gateway-restart",
+            requiresRestart: true,
+            requiresGatewayRestart: true,
+          }),
+        },
+      }),
+    );
+  });
+
   it("rejects component restarts when explicit confirmation is required", async () => {
     readConfigFileSnapshotForWriteMock.mockResolvedValue(
       createConfigWriteSnapshot({ agents: { defaults: { model: "sonnet-4.6" } } }),
@@ -299,6 +332,42 @@ describe("config shared auth disconnects", () => {
           }),
         },
       }),
+    );
+  });
+
+  it("allows component restarts under gateway-only confirmation policy", async () => {
+    const prevConfig: OpenClawConfig = {
+      agents: { defaults: { model: "sonnet-4.6" } },
+    };
+    readConfigFileSnapshotForWriteMock.mockResolvedValue(createConfigWriteSnapshot(prevConfig));
+
+    const { options, respond } = createConfigHandlerHarness({
+      method: "config.patch",
+      params: {
+        baseHash: "base-hash",
+        raw: JSON.stringify({ agents: { defaults: { model: "gpt-5.4" } } }),
+        restartPolicy: "gateway-restart-confirm-required",
+      },
+    });
+
+    await configHandlers["config.patch"](options);
+
+    expect(writeConfigFileMock).toHaveBeenCalledWith(
+      { agents: { defaults: { model: "gpt-5.4" } } },
+      {},
+    );
+    expect(scheduleGatewaySigusr1RestartMock).not.toHaveBeenCalled();
+    expect(respond).toHaveBeenCalledWith(
+      true,
+      expect.objectContaining({
+        ok: true,
+        reloadPlan: expect.objectContaining({
+          effect: "component-restart",
+          requiresRestart: true,
+          requiresGatewayRestart: false,
+        }),
+      }),
+      undefined,
     );
   });
 });

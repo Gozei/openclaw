@@ -359,6 +359,26 @@ function serializeReloadPlan(params: {
   };
 }
 
+function restartPolicyRejectsReloadPlan(
+  restartPolicy: unknown,
+  serializedReloadPlan: ReturnType<typeof serializeReloadPlan>,
+): boolean {
+  if (restartPolicy === "confirm-required") {
+    return serializedReloadPlan.requiresRestart;
+  }
+  if (restartPolicy === "gateway-restart-confirm-required") {
+    return serializedReloadPlan.requiresGatewayRestart;
+  }
+  return false;
+}
+
+function formatRestartPolicyRejectionMessage(method: string, restartPolicy: unknown): string {
+  if (restartPolicy === "gateway-restart-confirm-required") {
+    return `${method} requires Gateway restart; retry after user confirmation`;
+  }
+  return `${method} requires restart; retry after user confirmation`;
+}
+
 async function ensureResolvableSecretRefsOrRespond(params: {
   config: OpenClawConfig;
   respond: RespondFn;
@@ -543,13 +563,13 @@ export const configHandlers: GatewayRequestHandlers = {
       return;
     }
 
-    if (restartPolicy === "confirm-required" && serializedReloadPlan.requiresRestart) {
+    if (restartPolicyRejectsReloadPlan(restartPolicy, serializedReloadPlan)) {
       respond(
         false,
         undefined,
         errorShape(
           ErrorCodes.INVALID_REQUEST,
-          "config.set requires restart; retry after user confirmation",
+          formatRestartPolicyRejectionMessage("config.set", restartPolicy),
           {
             details: {
               reloadPlan: serializedReloadPlan,
@@ -696,13 +716,13 @@ export const configHandlers: GatewayRequestHandlers = {
       return;
     }
 
-    if (restartPolicy === "confirm-required" && serializedReloadPlan.requiresRestart) {
+    if (restartPolicyRejectsReloadPlan(restartPolicy, serializedReloadPlan)) {
       respond(
         false,
         undefined,
         errorShape(
           ErrorCodes.INVALID_REQUEST,
-          "config.patch requires restart; retry after user confirmation",
+          formatRestartPolicyRejectionMessage("config.patch", restartPolicy),
           {
             details: {
               reloadPlan: serializedReloadPlan,
@@ -814,13 +834,13 @@ export const configHandlers: GatewayRequestHandlers = {
       return;
     }
 
-    if (restartPolicy === "confirm-required" && serializedReloadPlan.requiresRestart) {
+    if (restartPolicyRejectsReloadPlan(restartPolicy, serializedReloadPlan)) {
       respond(
         false,
         undefined,
         errorShape(
           ErrorCodes.INVALID_REQUEST,
-          "config.apply requires restart; retry after user confirmation",
+          formatRestartPolicyRejectionMessage("config.apply", restartPolicy),
           {
             details: {
               reloadPlan: serializedReloadPlan,

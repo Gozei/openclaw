@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-export function resolvePowerShellPath(): string {
+export function resolvePowerShellPath(platform: NodeJS.Platform = process.platform): string {
   // Prefer PowerShell 7 when available; PS 5.1 lacks "&&" support.
   const programFiles = process.env.ProgramFiles || process.env.PROGRAMFILES || "C:\\Program Files";
   const pwsh7 = path.join(programFiles, "PowerShell", "7", "pwsh.exe");
@@ -17,7 +17,7 @@ export function resolvePowerShellPath(): string {
     }
   }
 
-  const pwshInPath = resolveShellFromPath("pwsh");
+  const pwshInPath = resolveShellFromPath("pwsh", platform);
   if (pwshInPath) {
     return pwshInPath;
   }
@@ -87,19 +87,60 @@ export function getShellConfig(): { shell: string; args: string[] } {
   return { shell: sh ?? "sh", args: ["-c"] };
 }
 
-export function resolveShellFromPath(name: string): string | undefined {
-  const envPath = process.env.PATH ?? "";
+function getCaseInsensitiveEnvValue(name: string): string | undefined {
+  const exact = process.env[name];
+  if (exact !== undefined) {
+    return exact;
+  }
+  const match = Object.keys(process.env).find((key) => key.toLowerCase() === name.toLowerCase());
+  return match ? process.env[match] : undefined;
+}
+
+function getWindowsPathExtCandidates(name: string): string[] {
+  if (path.extname(name)) {
+    return [name];
+  }
+
+  const rawPathExt = getCaseInsensitiveEnvValue("PATHEXT")?.trim() || ".EXE;.CMD;.BAT;.COM";
+  const candidates = [name];
+  const seen = new Set(candidates.map((candidate) => candidate.toLowerCase()));
+  for (const rawExt of rawPathExt.split(";")) {
+    const trimmed = rawExt.trim();
+    if (!trimmed) {
+      continue;
+    }
+    const ext = (trimmed.startsWith(".") ? trimmed : `.${trimmed}`).toLowerCase();
+    const candidate = `${name}${ext}`;
+    const key = candidate.toLowerCase();
+    if (!seen.has(key)) {
+      candidates.push(candidate);
+      seen.add(key);
+    }
+  }
+  return candidates;
+}
+
+export function resolveShellFromPath(
+  name: string,
+  platform: NodeJS.Platform = process.platform,
+): string | undefined {
+  const envPath =
+    platform === "win32" ? (getCaseInsensitiveEnvValue("PATH") ?? "") : (process.env.PATH ?? "");
   if (!envPath) {
     return undefined;
   }
-  const entries = envPath.split(path.delimiter).filter(Boolean);
+  const delimiter = platform === "win32" ? ";" : path.delimiter;
+  const entries = envPath.split(delimiter).filter(Boolean);
+  const names = platform === "win32" ? getWindowsPathExtCandidates(name) : [name];
   for (const entry of entries) {
-    const candidate = path.join(entry, name);
-    try {
-      fs.accessSync(candidate, fs.constants.X_OK);
-      return candidate;
-    } catch {
-      // ignore missing or non-executable entries
+    for (const candidateName of names) {
+      const candidate = path.join(entry, candidateName);
+      try {
+        fs.accessSync(candidate, fs.constants.X_OK);
+        return candidate;
+      } catch {
+        // ignore missing or non-executable entries
+      }
     }
   }
   return undefined;

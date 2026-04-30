@@ -316,7 +316,7 @@ describe("applyConfig", () => {
     expect(request).toHaveBeenNthCalledWith(2, "config.apply", {
       raw: '{\n  agent: { workspace: "~/openclaw" }\n}\n',
       baseHash: "hash-123",
-      restartPolicy: "confirm-required",
+      restartPolicy: "gateway-restart-confirm-required",
       sessionKey: "agent:main:whatsapp:dm:+15555550123",
     });
   });
@@ -489,7 +489,7 @@ describe("saveConfig", () => {
     confirm.mockRestore();
   });
 
-  it("asks before saving a config change that restarts a Gateway component", async () => {
+  it("allows component restarts without full Gateway restart confirmation", async () => {
     const confirm = vi.spyOn(globalThis, "confirm").mockReturnValueOnce(true);
     const request = vi.fn().mockImplementation(async (method: string, params: unknown) => {
       if (method === "config.set" && (params as { dryRun?: boolean }).dryRun) {
@@ -516,11 +516,11 @@ describe("saveConfig", () => {
 
     await saveConfig(state);
 
-    expect(confirm).toHaveBeenCalledWith(expect.stringContaining("Gateway components"));
+    expect(confirm).not.toHaveBeenCalled();
     expect(request).toHaveBeenNthCalledWith(2, "config.set", {
       raw: "{ agents: { defaults: { model: 'gpt-5.4' } } }",
       baseHash: "hash-component-restart",
-      restartPolicy: "auto",
+      restartPolicy: "gateway-restart-confirm-required",
     });
     confirm.mockRestore();
   });

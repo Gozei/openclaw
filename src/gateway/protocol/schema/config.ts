@@ -25,7 +25,11 @@ export const ConfigSetParamsSchema = Type.Object(
     baseHash: Type.Optional(NonEmptyString),
     dryRun: Type.Optional(Type.Boolean()),
     restartPolicy: Type.Optional(
-      Type.Union([Type.Literal("auto"), Type.Literal("confirm-required")]),
+      Type.Union([
+        Type.Literal("auto"),
+        Type.Literal("confirm-required"),
+        Type.Literal("gateway-restart-confirm-required"),
+      ]),
     ),
   },
   { additionalProperties: false },
@@ -37,7 +41,11 @@ const ConfigApplyLikeParamsSchema = Type.Object(
     baseHash: Type.Optional(NonEmptyString),
     dryRun: Type.Optional(Type.Boolean()),
     restartPolicy: Type.Optional(
-      Type.Union([Type.Literal("auto"), Type.Literal("confirm-required")]),
+      Type.Union([
+        Type.Literal("auto"),
+        Type.Literal("confirm-required"),
+        Type.Literal("gateway-restart-confirm-required"),
+      ]),
     ),
     sessionKey: Type.Optional(Type.String()),
     deliveryContext: Type.Optional(ConfigDeliveryContextSchema),

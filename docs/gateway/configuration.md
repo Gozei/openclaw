@@ -575,7 +575,7 @@ then `config.patch`.
 
 <AccordionGroup>
   <Accordion title="config.apply (full replace)">
-    Validates + writes the full config and restarts the Gateway in one step.
+    Validates + writes the full config and applies the reload plan in one step.
 
     <Warning>
     `config.apply` replaces the **entire config**. Use `config.patch` for partial updates, or `openclaw config set` for single keys.
@@ -586,7 +586,7 @@ then `config.patch`.
     - `raw` (string) — JSON5 payload for the entire config
     - `baseHash` (optional) — config hash from `config.get` (required when config exists)
     - `dryRun` (optional boolean) — validate and return the reload plan without writing config
-    - `restartPolicy` (optional) — set `"confirm-required"` to reject restart-impacting changes until the caller has explicit user confirmation
+    - `restartPolicy` (optional) — set `"confirm-required"` to reject restart-impacting changes until the caller has explicit user confirmation; set `"gateway-restart-confirm-required"` to allow hot/component reloads while rejecting full Gateway process restarts until confirmed
     - `sessionKey` (optional) — session key for the post-restart wake-up ping
     - `note` (optional) — note for the restart sentinel
     - `restartDelayMs` (optional) — delay before restart (default 2000)
@@ -616,7 +616,7 @@ then `config.patch`.
     - `raw` (string) — JSON5 with just the keys to change
     - `baseHash` (required) — config hash from `config.get`
     - `dryRun` (optional boolean) — validate and return the reload plan without writing config
-    - `restartPolicy` (optional) — set `"confirm-required"` to reject restart-impacting changes until the caller has explicit user confirmation
+    - `restartPolicy` (optional) — same as `config.apply`
     - `sessionKey`, `note`, `restartDelayMs` — same as `config.apply`
 
     The response includes `reloadPlan` so clients can distinguish hot reloads, channel/component restarts, and full Gateway restarts. `reloadPlan.requiresRestart` covers any restart-impacting change; `reloadPlan.requiresGatewayRestart` is true only for full Gateway restarts. Restart behavior matches `config.apply`: coalesced pending restarts plus a 30-second cooldown between restart cycles.

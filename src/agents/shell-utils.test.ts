@@ -110,7 +110,7 @@ describe("resolveShellFromPath", () => {
   const tempDirs: string[] = [];
 
   beforeEach(() => {
-    envSnapshot = captureEnv(["PATH"]);
+    envSnapshot = captureEnv(["PATH", "Path", "PATHEXT"]);
   });
 
   afterEach(() => {
@@ -123,6 +123,23 @@ describe("resolveShellFromPath", () => {
   it("returns undefined when PATH is empty", () => {
     process.env.PATH = "";
     expect(resolveShellFromPath("bash")).toBeUndefined();
+  });
+
+  it("resolves Windows executable extensions from PATHEXT", () => {
+    const binDir = createTempCommandDir(tempDirs, [{ name: "pwsh.exe", executable: true }]);
+    process.env.PATH = binDir;
+    process.env.PATHEXT = ".CMD;.EXE";
+
+    expect(resolveShellFromPath("pwsh", "win32")).toBe(path.join(binDir, "pwsh.exe"));
+  });
+
+  it("resolves Windows Path env casing", () => {
+    const binDir = createTempCommandDir(tempDirs, [{ name: "pwsh.exe", executable: true }]);
+    delete process.env.PATH;
+    process.env.Path = binDir;
+    process.env.PATHEXT = ".EXE";
+
+    expect(resolveShellFromPath("pwsh", "win32")).toBe(path.join(binDir, "pwsh.exe"));
   });
 
   if (isWin) {
@@ -195,6 +212,7 @@ describe("resolvePowerShellPath", () => {
       "SystemRoot",
       "WINDIR",
       "PATH",
+      "PATHEXT",
     ]);
   });
 
@@ -244,17 +262,18 @@ describe("resolvePowerShellPath", () => {
     const programFiles = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-pfiles-"));
     const binDir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-bin-"));
     tempDirs.push(programFiles, binDir);
-    const pwshPath = path.join(binDir, "pwsh");
+    const pwshPath = path.join(binDir, "pwsh.exe");
     fs.writeFileSync(pwshPath, "");
     fs.chmodSync(pwshPath, 0o755);
 
     process.env.ProgramFiles = programFiles;
     process.env.PATH = binDir;
+    process.env.PATHEXT = ".EXE;.CMD";
     delete process.env.ProgramW6432;
     delete process.env.SystemRoot;
     delete process.env.WINDIR;
 
-    expect(resolvePowerShellPath()).toBe(pwshPath);
+    expect(resolvePowerShellPath("win32")).toBe(pwshPath);
   });
 
   it("falls back to Windows PowerShell 5.1 path when pwsh is unavailable", () => {
