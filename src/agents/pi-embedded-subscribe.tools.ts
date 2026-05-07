@@ -154,6 +154,7 @@ const TRUSTED_TOOL_RESULT_MEDIA = new Set([
   "message",
   "music_generate",
   "nodes",
+  "output_write",
   "process",
   "read",
   "session_status",

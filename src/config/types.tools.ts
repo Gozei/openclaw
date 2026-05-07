@@ -139,6 +139,12 @@ export type MediaToolsConfig = {
   models?: MediaUnderstandingModelConfig[];
   /** Max concurrent media understanding runs. */
   concurrency?: number;
+  /**
+   * Optional root directory for agent-generated output files such as images,
+   * videos, music, and user-facing files written with output_write. Inbound
+   * uploads and transient media cache stay in the managed OpenClaw media store.
+   */
+  generatedOutputRoot?: string;
   asyncCompletion?: {
     /**
      * Enable direct channel sends for completed async media generation tasks.

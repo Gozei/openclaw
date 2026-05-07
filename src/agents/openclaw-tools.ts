@@ -23,6 +23,7 @@ import { createImageTool } from "./tools/image-tool.js";
 import { createMessageTool } from "./tools/message-tool.js";
 import { createMusicGenerateTool } from "./tools/music-generate-tool.js";
 import { createNodesTool } from "./tools/nodes-tool.js";
+import { createOutputWriteTool } from "./tools/output-write-tool.js";
 import { createPdfTool } from "./tools/pdf-tool.js";
 import { createSessionStatusTool } from "./tools/session-status-tool.js";
 import { createSessionsHistoryTool } from "./tools/sessions-history-tool.js";
@@ -152,6 +153,9 @@ export function createOpenClawTools(
   const imageGenerateTool = createImageGenerateTool({
     config: options?.config,
     agentDir: options?.agentDir,
+    agentId: sessionAgentId,
+    agentSessionKey: options?.agentSessionKey,
+    sessionId: options?.sessionId,
     workspaceDir,
     sandbox,
     fsPolicy: options?.fsPolicy,
@@ -159,7 +163,9 @@ export function createOpenClawTools(
   const videoGenerateTool = createVideoGenerateTool({
     config: options?.config,
     agentDir: options?.agentDir,
+    agentId: sessionAgentId,
     agentSessionKey: options?.agentSessionKey,
+    sessionId: options?.sessionId,
     requesterOrigin: deliveryContext ?? undefined,
     workspaceDir,
     sandbox,
@@ -168,11 +174,19 @@ export function createOpenClawTools(
   const musicGenerateTool = createMusicGenerateTool({
     config: options?.config,
     agentDir: options?.agentDir,
+    agentId: sessionAgentId,
     agentSessionKey: options?.agentSessionKey,
+    sessionId: options?.sessionId,
     requesterOrigin: deliveryContext ?? undefined,
     workspaceDir,
     sandbox,
     fsPolicy: options?.fsPolicy,
+  });
+  const outputWriteTool = createOutputWriteTool({
+    config: options?.config,
+    agentId: sessionAgentId,
+    agentSessionKey: options?.agentSessionKey,
+    sessionId: options?.sessionId,
   });
   const pdfTool = options?.agentDir?.trim()
     ? createPdfTool({
@@ -238,7 +252,12 @@ export function createOpenClawTools(
       agentChannel: options?.agentChannel,
       config: options?.config,
     }),
-    ...collectPresentOpenClawTools([imageGenerateTool, musicGenerateTool, videoGenerateTool]),
+    ...collectPresentOpenClawTools([
+      imageGenerateTool,
+      musicGenerateTool,
+      videoGenerateTool,
+      outputWriteTool,
+    ]),
     createGatewayTool({
       agentSessionKey: options?.agentSessionKey,
       config: options?.config,

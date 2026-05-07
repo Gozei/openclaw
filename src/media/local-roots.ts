@@ -56,6 +56,13 @@ export function getAgentScopedMediaLocalRoots(
   agentId?: string,
 ): readonly string[] {
   const roots = buildMediaLocalRoots(resolveStateDir(), resolveConfigDir());
+  const generatedOutputRoot = normalizeOptionalString(cfg.tools?.media?.generatedOutputRoot);
+  if (generatedOutputRoot) {
+    const resolvedGeneratedOutputRoot = path.resolve(resolveUserPath(generatedOutputRoot));
+    if (!roots.includes(resolvedGeneratedOutputRoot)) {
+      roots.push(resolvedGeneratedOutputRoot);
+    }
+  }
   const normalizedAgentId = normalizeOptionalString(agentId);
   if (!normalizedAgentId) {
     return roots;

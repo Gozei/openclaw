@@ -13,8 +13,8 @@ import type {
   ImageGenerationSourceImage,
 } from "../../image-generation/types.js";
 import { resolveConfiguredMediaMaxBytes } from "../../media/configured-max-bytes.js";
+import { saveGeneratedOutput } from "../../media/generated-output-store.js";
 import { getImageMetadata } from "../../media/image-ops.js";
-import { saveMediaBuffer } from "../../media/store.js";
 import { loadWebMedia } from "../../media/web-media.js";
 import { getProviderEnvVars } from "../../secrets/provider-env-vars.js";
 import { resolveUserPath } from "../../utils.js";
@@ -362,6 +362,9 @@ async function inferResolutionFromInputImages(
 export function createImageGenerateTool(options?: {
   config?: OpenClawConfig;
   agentDir?: string;
+  agentId?: string;
+  agentSessionKey?: string;
+  sessionId?: string;
   workspaceDir?: string;
   sandbox?: ImageGenerateSandboxConfig;
   fsPolicy?: ToolFsPolicy;
@@ -532,13 +535,21 @@ export function createImageGenerateTool(options?: {
 
       const savedImages = await Promise.all(
         result.images.map((image) =>
-          saveMediaBuffer(
-            image.buffer,
-            image.mimeType,
-            "tool-image-generation",
-            configuredMediaMaxBytes,
-            filename || image.fileName,
-          ),
+          saveGeneratedOutput({
+            cfg: effectiveCfg,
+            buffer: image.buffer,
+            mimeType: image.mimeType,
+            fallbackSubdir: "tool-image-generation",
+            maxBytes: configuredMediaMaxBytes,
+            filenameHint: filename || image.fileName,
+            kind: "image",
+            agentId: options?.agentId,
+            sessionId: options?.sessionId,
+            sessionKey: options?.agentSessionKey,
+            provider: result.provider,
+            model: result.model,
+            prompt,
+          }),
         ),
       );
 

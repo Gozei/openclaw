@@ -774,6 +774,7 @@ export const ToolsMediaSchema = z
   .object({
     models: z.array(MediaUnderstandingModelSchema).optional(),
     concurrency: z.number().int().positive().optional(),
+    generatedOutputRoot: z.string().min(1).optional(),
     asyncCompletion: z
       .object({
         directSend: z.boolean().optional(),
