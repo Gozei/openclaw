@@ -29,6 +29,12 @@ async function writeJsonFixture(root: string, relativePath: string, value: unkno
   await fs.writeFile(filePath, JSON.stringify(value), "utf-8");
 }
 
+async function writeTextFixture(root: string, relativePath: string, value: string) {
+  const filePath = path.join(root, relativePath);
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.writeFile(filePath, value, "utf-8");
+}
+
 function expectVersionMetadataToBeMissing(moduleUrl: string) {
   expect(readVersionFromPackageJsonForModuleUrl(moduleUrl)).toBeNull();
   expect(readVersionFromBuildInfoForModuleUrl(moduleUrl)).toBeNull();
@@ -78,6 +84,36 @@ describe("version resolution", () => {
     await withTempDir({ prefix: "openclaw-version-" }, async (root) => {
       await writeJsonFixture(root, "package.json", { name: "other-package", version: "9.9.9" });
       await writeJsonFixture(root, "build-info.json", { version: "  " });
+      const moduleUrl = await ensureModuleFixture(root);
+      expectVersionMetadataToBeMissing(moduleUrl);
+    });
+  });
+
+  it("trusts fork package metadata when the package exposes the host runtime shape", async () => {
+    await withTempDir({ prefix: "openclaw-version-" }, async (root) => {
+      await writeJsonFixture(root, "package.json", {
+        name: "@gozei/deepclaw",
+        version: "2026.4.15",
+        exports: {
+          "./plugin-sdk": { default: "./dist/plugin-sdk/index.js" },
+        },
+      });
+      await writeTextFixture(root, "openclaw.mjs", "export {};\n");
+      const moduleUrl = await ensureModuleFixture(root);
+      expect(readVersionFromPackageJsonForModuleUrl(moduleUrl)).toBe("2026.4.15");
+      expect(resolveVersionFromModuleUrl(moduleUrl)).toBe("2026.4.15");
+    });
+  });
+
+  it("ignores fork package metadata without trusted host indicators", async () => {
+    await withTempDir({ prefix: "openclaw-version-" }, async (root) => {
+      await writeJsonFixture(root, "package.json", {
+        name: "@gozei/deepclaw",
+        version: "2026.4.15",
+        exports: {
+          "./plugin-sdk": { default: "./dist/plugin-sdk/index.js" },
+        },
+      });
       const moduleUrl = await ensureModuleFixture(root);
       expectVersionMetadataToBeMissing(moduleUrl);
     });

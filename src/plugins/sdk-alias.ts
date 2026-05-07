@@ -475,7 +475,7 @@ export function resolvePluginRuntimeModulePath(
       isProduction: process.env.NODE_ENV === "production",
       pluginSdkResolution: params.pluginSdkResolution,
     });
-    const packageRoot = resolveLoaderPackageRoot({ ...params, modulePath });
+    const packageRoot = resolveLoaderPluginSdkPackageRoot({ ...params, modulePath });
     const candidates = packageRoot
       ? orderedKinds.map((kind) =>
           kind === "src"
