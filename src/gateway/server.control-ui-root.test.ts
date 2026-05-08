@@ -1,7 +1,8 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
+import { resolveGatewayControlUiRootState } from "./server-control-ui-root.js";
 import { installGatewayTestHooks, testState, withGatewayServer } from "./test-helpers.js";
 
 installGatewayTestHooks({ scope: "suite" });
@@ -30,6 +31,19 @@ async function withGlobalControlUiHardlinkFixture<T>(run: (rootPath: string) => 
 }
 
 describe("gateway.controlUi.root", () => {
+  test("does not resolve configured Control UI assets when the Control UI is disabled", async () => {
+    const warn = vi.fn();
+    const root = await resolveGatewayControlUiRootState({
+      controlUiEnabled: false,
+      controlUiRootOverride: "/definitely/missing/control-ui",
+      gatewayRuntime: {} as never,
+      log: { warn },
+    });
+
+    expect(root).toBeUndefined();
+    expect(warn).not.toHaveBeenCalled();
+  });
+
   test("rejects hardlinked index.html when configured root points at global OpenClaw package control-ui", async () => {
     await withGlobalControlUiHardlinkFixture(async (rootPath) => {
       testState.gatewayControlUi = { root: rootPath };
