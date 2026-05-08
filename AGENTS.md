@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 - Repo: https://github.com/openclaw/openclaw
-- In chat replies, file references must be repo-root relative only (example: `src/telegram/index.ts:80`); never absolute paths or `~/...`.
+- In chat replies, visible file references must be repo-root relative (example: `src/telegram/index.ts:80`). In Codex Desktop, prefer Markdown links whose label is the repo-root relative path and whose target jumps to the local file/line; do not show `~/...` or raw absolute paths as visible text.
 - Do not edit files covered by security-focused `CODEOWNERS` rules unless a listed owner explicitly asked for the change or is already reviewing it with you. Treat those paths as restricted surfaces, not drive-by cleanup.
 
 ## Project Structure & Module Organization
