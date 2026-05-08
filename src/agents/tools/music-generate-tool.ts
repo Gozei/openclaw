@@ -4,7 +4,7 @@ import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import { formatErrorMessage } from "../../infra/errors.js";
 import { createSubsystemLogger } from "../../logging/subsystem.js";
 import { resolveConfiguredMediaMaxBytes } from "../../media/configured-max-bytes.js";
-import { saveMediaBuffer } from "../../media/store.js";
+import { saveGeneratedOutput } from "../../media/generated-output-store.js";
 import { loadWebMedia } from "../../media/web-media.js";
 import { resolveMusicGenerationModeCapabilities } from "../../music-generation/capabilities.js";
 import { parseMusicGenerationModelRef } from "../../music-generation/model-ref.js";
@@ -336,6 +336,9 @@ async function executeMusicGenerationJob(params: {
   filename?: string;
   loadedReferenceImages: LoadedReferenceImage[];
   taskHandle?: MusicGenerationTaskHandle | null;
+  agentId?: string;
+  sessionId?: string;
+  sessionKey?: string;
 }): Promise<ExecutedMusicGeneration> {
   if (params.taskHandle) {
     recordMusicGenerationTaskProgress({
@@ -363,13 +366,21 @@ async function executeMusicGenerationJob(params: {
   const configuredMediaMaxBytes = resolveConfiguredMediaMaxBytes(params.effectiveCfg);
   const savedTracks = await Promise.all(
     result.tracks.map((track) =>
-      saveMediaBuffer(
-        track.buffer,
-        track.mimeType,
-        "tool-music-generation",
-        configuredMediaMaxBytes,
-        params.filename || track.fileName,
-      ),
+      saveGeneratedOutput({
+        cfg: params.effectiveCfg,
+        buffer: track.buffer,
+        mimeType: track.mimeType,
+        fallbackSubdir: "tool-music-generation",
+        maxBytes: configuredMediaMaxBytes,
+        filenameHint: params.filename || track.fileName,
+        kind: "music",
+        agentId: params.agentId,
+        sessionId: params.sessionId,
+        sessionKey: params.sessionKey,
+        provider: result.provider,
+        model: result.model,
+        prompt: params.prompt,
+      }),
     ),
   );
   const ignoredOverrides = result.ignoredOverrides ?? [];
@@ -456,7 +467,9 @@ async function executeMusicGenerationJob(params: {
 export function createMusicGenerateTool(options?: {
   config?: OpenClawConfig;
   agentDir?: string;
+  agentId?: string;
   agentSessionKey?: string;
+  sessionId?: string;
   requesterOrigin?: DeliveryContext;
   workspaceDir?: string;
   sandbox?: MusicGenerateSandboxConfig;
@@ -564,6 +577,9 @@ export function createMusicGenerateTool(options?: {
               filename,
               loadedReferenceImages,
               taskHandle,
+              agentId: options?.agentId,
+              sessionId: options?.sessionId,
+              sessionKey: options?.agentSessionKey,
             });
             completeMusicGenerationTaskRun({
               handle: taskHandle,
@@ -644,6 +660,9 @@ export function createMusicGenerateTool(options?: {
           filename,
           loadedReferenceImages,
           taskHandle,
+          agentId: options?.agentId,
+          sessionId: options?.sessionId,
+          sessionKey: options?.agentSessionKey,
         });
         completeMusicGenerationTaskRun({
           handle: taskHandle,

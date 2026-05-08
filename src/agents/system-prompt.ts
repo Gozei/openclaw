@@ -461,6 +461,7 @@ export function buildAgentSystemPrompt(params: {
     subagents: "List, steer, or kill sub-agent runs for this requester session",
     session_status:
       "Show a /status-equivalent status card (usage + time + Reasoning/Verbose/Elevated); use for model-use questions (📊 session_status); optional per-session model override",
+    output_write: "Write user-facing output files to the configured OpenClaw output root",
     image: "Analyze an image with the configured image model",
     image_generate: "Generate images with the configured image-generation model",
   };
@@ -489,6 +490,7 @@ export function buildAgentSystemPrompt(params: {
     "sessions_send",
     "subagents",
     "session_status",
+    "output_write",
     "image",
     "image_generate",
   ];
@@ -599,6 +601,9 @@ export function buildAgentSystemPrompt(params: {
     params.sandboxInfo?.enabled && sanitizedSandboxContainerWorkspace
       ? `For read/write/edit/apply_patch, file paths resolve against host workspace: ${sanitizedWorkspaceDir}. For bash/exec commands, use sandbox container paths under ${sanitizedSandboxContainerWorkspace} (or relative paths from that workdir), not host paths. Prefer relative paths so both sandboxed exec and file tools work consistently.`
       : "Treat this directory as the single global workspace for file operations unless explicitly instructed otherwise.";
+  const outputWriteGuidance = availableTools.has("output_write")
+    ? `When the user asks you to create, export, or save a final file for them (for example .txt, .md, .json, .csv, .html, .py, .doc, or .ppt), use ${resolveToolName("output_write")} so it is stored under the configured OpenClaw output root. Reserve write/edit/apply_patch for workspace or project edits.`
+    : undefined;
   const safetySection = [
     "## Safety",
     "You have no independent goals: do not pursue self-preservation, replication, resource acquisition, or power-seeking; avoid long-term plans beyond the user's request.",
@@ -742,6 +747,7 @@ export function buildAgentSystemPrompt(params: {
     "## Workspace",
     `Your working directory is: ${displayWorkspaceDir}`,
     workspaceGuidance,
+    outputWriteGuidance ?? "",
     ...workspaceNotes,
     "",
     ...docsSection,

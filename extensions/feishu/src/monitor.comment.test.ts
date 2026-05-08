@@ -5,7 +5,7 @@ import {
 } from "openclaw/plugin-sdk/reply-runtime";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createNonExitingRuntimeEnv } from "../../../test/helpers/plugins/runtime-env.js";
-import type { ClawdbotConfig, PluginRuntime, RuntimeEnv } from "../runtime-api.js";
+import type { ClawdbotConfig, PluginRuntime } from "../runtime-api.js";
 import * as dedup from "./dedup.js";
 import { monitorSingleAccount } from "./monitor.account.js";
 import {
@@ -22,8 +22,16 @@ const monitorWebSocketMock = vi.hoisted(() => vi.fn(async () => {}));
 const monitorWebhookMock = vi.hoisted(() => vi.fn(async () => {}));
 const createFeishuThreadBindingManagerMock = vi.hoisted(() => vi.fn(() => ({ stop: vi.fn() })));
 
+type TestRuntimeEnv = {
+  log: (...args: unknown[]) => void;
+  error: (...args: unknown[]) => void;
+  exit: (code: number) => void;
+  writeStdout: (value: string) => void;
+  writeJson: (value: unknown, space?: number) => void;
+};
+
 let handlers: Record<string, (data: unknown) => Promise<void>> = {};
-let lastRuntime: ReturnType<typeof createNonExitingRuntimeEnv> | null = null;
+let lastRuntime: TestRuntimeEnv | null = null;
 const TEST_DOC_TOKEN = "ZsJfdxrBFo0RwuxteOLc1Ekvneb";
 const TEST_WIKI_TOKEN = "OtYpd5pKOoMeQzxrzkocv9KIn4H";
 
@@ -254,12 +262,12 @@ async function setupCommentMonitorHandler(): Promise<(data: unknown) => Promise<
     handlers = registered;
   });
   createEventDispatcherMock.mockReturnValue({ register });
-  lastRuntime = createNonExitingRuntimeEnv();
+  lastRuntime = createNonExitingRuntimeEnv() as TestRuntimeEnv;
 
   await monitorSingleAccount({
     cfg: buildMonitorConfig(),
     account: buildMonitorAccount(),
-    runtime: lastRuntime as RuntimeEnv,
+    runtime: lastRuntime,
     botOpenIdSource: {
       kind: "prefetched",
       botOpenId: "ou_bot",
