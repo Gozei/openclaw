@@ -1,8 +1,17 @@
+import fs from "node:fs";
 import { createRequire } from "node:module";
+import path from "node:path";
 import { normalizeOptionalString } from "./shared/string-coerce.js";
 
 declare const __OPENCLAW_VERSION__: string | undefined;
 const CORE_PACKAGE_NAME = "openclaw";
+
+type RuntimePackageJson = {
+  name?: string;
+  version?: string;
+  exports?: Record<string, unknown>;
+  bin?: string | Record<string, unknown>;
+};
 
 const PACKAGE_JSON_CANDIDATES = [
   "../package.json",
@@ -26,12 +35,19 @@ function readVersionFromJsonCandidates(
     const require = createRequire(moduleUrl);
     for (const candidate of candidates) {
       try {
-        const parsed = require(candidate) as { name?: string; version?: string };
+        const parsed = require(candidate) as RuntimePackageJson;
         const version = normalizeOptionalString(parsed.version);
         if (!version) {
           continue;
         }
-        if (opts.requirePackageName && parsed.name !== CORE_PACKAGE_NAME) {
+        const resolvedCandidatePath = require.resolve(candidate);
+        if (
+          opts.requirePackageName &&
+          !isTrustedRuntimePackageJson({
+            packageJson: parsed,
+            packageJsonPath: resolvedCandidatePath,
+          })
+        ) {
           continue;
         }
         return version;
@@ -43,6 +59,45 @@ function readVersionFromJsonCandidates(
   } catch {
     return null;
   }
+}
+
+function hasOpenClawBin(bin: RuntimePackageJson["bin"]): boolean {
+  return (
+    (typeof bin === "string" && normalizeOptionalString(bin)?.includes("openclaw")) ||
+    (typeof bin === "object" && bin !== null && typeof bin.openclaw === "string")
+  );
+}
+
+function hasPluginSdkRootExport(exportsMap: RuntimePackageJson["exports"]): boolean {
+  return (
+    typeof exportsMap === "object" &&
+    exportsMap !== null &&
+    Object.prototype.hasOwnProperty.call(exportsMap, "./plugin-sdk")
+  );
+}
+
+function hasCliEntryExport(exportsMap: RuntimePackageJson["exports"]): boolean {
+  return (
+    typeof exportsMap === "object" &&
+    exportsMap !== null &&
+    Object.prototype.hasOwnProperty.call(exportsMap, "./cli-entry")
+  );
+}
+
+function isTrustedRuntimePackageJson(params: {
+  packageJson: RuntimePackageJson;
+  packageJsonPath: string;
+}): boolean {
+  if (params.packageJson.name === CORE_PACKAGE_NAME) {
+    return true;
+  }
+  if (!hasPluginSdkRootExport(params.packageJson.exports)) {
+    return false;
+  }
+  if (hasCliEntryExport(params.packageJson.exports) || hasOpenClawBin(params.packageJson.bin)) {
+    return true;
+  }
+  return fs.existsSync(path.join(path.dirname(params.packageJsonPath), "openclaw.mjs"));
 }
 
 function firstNonEmpty(...values: Array<string | undefined>): string | undefined {

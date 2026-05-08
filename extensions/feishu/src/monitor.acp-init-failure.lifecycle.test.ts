@@ -26,8 +26,16 @@ const {
   withReplyDispatcherMock,
 } = getFeishuLifecycleTestMocks();
 
+type TestRuntimeEnv = {
+  log: (...args: unknown[]) => void;
+  error: (...args: unknown[]) => void;
+  exit: (code: number) => void;
+  writeStdout: (value: string) => void;
+  writeJson: (value: unknown, space?: number) => void;
+};
+
 let _handlers: Record<string, (data: unknown) => Promise<void>> = {};
-let lastRuntime: ReturnType<typeof createRuntimeEnv> | null = null;
+let lastRuntime: TestRuntimeEnv | null = null;
 const originalStateDir = process.env.OPENCLAW_STATE_DIR;
 const { cfg: lifecycleConfig, account: lifecycleAccount } = createFeishuLifecycleFixture({
   accountId: "acct-acp",
@@ -56,7 +64,7 @@ const { cfg: lifecycleConfig, account: lifecycleAccount } = createFeishuLifecycl
 };
 
 async function setupLifecycleMonitor() {
-  lastRuntime = createRuntimeEnv();
+  lastRuntime = createRuntimeEnv() as TestRuntimeEnv;
   return setupFeishuLifecycleHandler({
     createEventDispatcherMock,
     onRegister: (registered) => {

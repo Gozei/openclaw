@@ -623,6 +623,8 @@ export const FIELD_HELP: Record<string, string> = {
     "Shared fallback model list used by media understanding tools when modality-specific model lists are not set. Keep this aligned with available multimodal providers to avoid runtime fallback churn.",
   "tools.media.concurrency":
     "Maximum number of concurrent media understanding operations per turn across image, audio, and video tasks. Lower this in resource-constrained deployments to prevent CPU/network saturation.",
+  "tools.media.generatedOutputRoot":
+    "Optional root directory for agent-generated output files such as images, videos, music, and user-facing files written with output_write. OpenClaw groups files below this root by agent, month, and output kind; inbound uploads and transient media cache stay in the managed media store.",
   "tools.media.asyncCompletion.directSend":
     "Enable direct channel sends for completed async music/video generation tasks instead of relying on the requester session wake path. Default off so detached media completion keeps the legacy model-delivery flow unless you opt in.",
   "tools.media.image.enabled":

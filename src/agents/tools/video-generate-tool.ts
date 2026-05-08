@@ -4,7 +4,7 @@ import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import { formatErrorMessage } from "../../infra/errors.js";
 import { createSubsystemLogger } from "../../logging/subsystem.js";
 import { resolveConfiguredMediaMaxBytes } from "../../media/configured-max-bytes.js";
-import { saveMediaBuffer } from "../../media/store.js";
+import { saveGeneratedOutput } from "../../media/generated-output-store.js";
 import { loadWebMedia } from "../../media/web-media.js";
 import { readSnakeCaseParamRaw } from "../../param-key.js";
 import { resolveUserPath } from "../../utils.js";
@@ -562,6 +562,9 @@ async function executeVideoGenerationJob(params: {
   loadedReferenceAudios: LoadedReferenceAsset[];
   taskHandle?: VideoGenerationTaskHandle | null;
   providerOptions?: Record<string, unknown>;
+  agentId?: string;
+  sessionId?: string;
+  sessionKey?: string;
 }): Promise<ExecutedVideoGeneration> {
   if (params.taskHandle) {
     recordVideoGenerationTaskProgress({
@@ -615,13 +618,21 @@ async function executeVideoGenerationJob(params: {
   const configuredMediaMaxBytes = resolveConfiguredMediaMaxBytes(params.effectiveCfg);
   const savedVideos = await Promise.all(
     bufferVideos.map((video) =>
-      saveMediaBuffer(
-        video.buffer,
-        video.mimeType,
-        "tool-video-generation",
-        configuredMediaMaxBytes,
-        params.filename || video.fileName,
-      ),
+      saveGeneratedOutput({
+        cfg: params.effectiveCfg,
+        buffer: video.buffer,
+        mimeType: video.mimeType,
+        fallbackSubdir: "tool-video-generation",
+        maxBytes: configuredMediaMaxBytes,
+        filenameHint: params.filename || video.fileName,
+        kind: "video",
+        agentId: params.agentId,
+        sessionId: params.sessionId,
+        sessionKey: params.sessionKey,
+        provider: result.provider,
+        model: result.model,
+        prompt: params.prompt,
+      }),
     ),
   );
   const totalCount = savedVideos.length + urlOnlyVideos.length;
@@ -759,7 +770,9 @@ async function executeVideoGenerationJob(params: {
 export function createVideoGenerateTool(options?: {
   config?: OpenClawConfig;
   agentDir?: string;
+  agentId?: string;
   agentSessionKey?: string;
+  sessionId?: string;
   requesterOrigin?: DeliveryContext;
   workspaceDir?: string;
   sandbox?: VideoGenerateSandboxConfig;
@@ -960,6 +973,9 @@ export function createVideoGenerateTool(options?: {
               loadedReferenceAudios,
               taskHandle,
               providerOptions,
+              agentId: options?.agentId,
+              sessionId: options?.sessionId,
+              sessionKey: options?.agentSessionKey,
             });
             completeVideoGenerationTaskRun({
               handle: taskHandle,
@@ -1054,6 +1070,9 @@ export function createVideoGenerateTool(options?: {
           loadedReferenceAudios,
           taskHandle,
           providerOptions,
+          agentId: options?.agentId,
+          sessionId: options?.sessionId,
+          sessionKey: options?.agentSessionKey,
         });
         completeVideoGenerationTaskRun({
           handle: taskHandle,

@@ -328,6 +328,19 @@ describe("config schema regressions", () => {
 
     expect(res.ok).toBe(true);
   });
+
+  it("accepts tools.media.generatedOutputRoot", () => {
+    const res = validateConfigObject({
+      tools: {
+        media: {
+          generatedOutputRoot: "/tmp/openclaw-generated-output",
+        },
+      },
+    });
+
+    expect(res.ok).toBe(true);
+  });
+
   it("accepts discovery.wideArea.domain for unicast DNS-SD", () => {
     const res = validateConfigObject({
       discovery: {

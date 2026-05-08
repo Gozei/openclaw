@@ -2348,6 +2348,7 @@ Configures inbound media understanding (image/audio/video):
   tools: {
     media: {
       concurrency: 2,
+      generatedOutputRoot: "/path/to/openclaw-outputs",
       asyncCompletion: {
         directSend: false, // opt-in: send finished async music/video directly to the channel
       },
@@ -2399,6 +2400,14 @@ Provider auth follows standard order: `auth-profiles.json` → env vars → `mod
 - `asyncCompletion.directSend`: when `true`, completed async `music_generate`
   and `video_generate` tasks try direct channel delivery first. Default: `false`
   (legacy requester-session wake/model-delivery path).
+
+**Generated output fields:**
+
+- `generatedOutputRoot`: optional root for agent-generated files such as
+  `image_generate`, `video_generate`, `music_generate`, and `output_write`
+  results. OpenClaw stores files below this root by agent, month, and output
+  kind, and writes a monthly `manifest.jsonl`. Inbound uploads and transient
+  media cache still use the managed media store.
 
 </Accordion>
 

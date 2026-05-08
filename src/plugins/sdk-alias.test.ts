@@ -138,9 +138,23 @@ function createPluginRuntimeAliasFixture(params?: { srcBody?: string; distBody?:
   mkdirSafeDir(path.dirname(distFile));
   fs.writeFileSync(
     path.join(root, "package.json"),
-    JSON.stringify({ name: "openclaw", type: "module" }, null, 2),
+    JSON.stringify(
+      {
+        name: "openclaw",
+        type: "module",
+        bin: {
+          openclaw: "openclaw.mjs",
+        },
+        exports: {
+          "./plugin-sdk": { default: "./dist/plugin-sdk/index.js" },
+        },
+      },
+      null,
+      2,
+    ),
     "utf-8",
   );
+  fs.writeFileSync(path.join(root, "openclaw.mjs"), "export {};\n", "utf-8");
   fs.writeFileSync(
     srcFile,
     params?.srcBody ?? "export const createPluginRuntime = () => ({});\n",
@@ -226,12 +240,14 @@ function resolvePluginSdkAlias(params: {
 function resolvePluginRuntimeModule(params: {
   modulePath: string;
   argv1?: string;
+  cwd?: string;
   env?: NodeJS.ProcessEnv;
 }) {
   const run = () =>
     resolvePluginRuntimeModulePath({
       modulePath: params.modulePath,
       argv1: params.argv1,
+      cwd: params.cwd,
     });
   return params.env ? withEnv(params.env, run) : run();
 }
@@ -1046,13 +1062,24 @@ export const syntheticRuntimeMarker = {
       env: { NODE_ENV: undefined },
       expected: "src" as const,
     },
-  ])("$name", ({ modulePath, argv1, env, expected }) => {
+    {
+      name: "resolves plugin runtime module from cwd fallback when argv1 does not point at openclaw",
+      modulePath: () => "/tmp/tsx-cache/openclaw-loader.js",
+      argv1: () => "/usr/bin/env",
+      cwd: (root: string) => root,
+      env: { NODE_ENV: undefined },
+      expected: "src" as const,
+    },
+  ])("$name", ({ modulePath, argv1, cwd, env, expected }) => {
     const fixture = createPluginRuntimeAliasFixture();
-    const resolved = resolvePluginRuntimeModule({
-      modulePath: modulePath(fixture.root),
-      argv1: argv1?.(fixture.root),
-      env,
-    });
+    const resolved = withCwd(cwd?.(fixture.root) ?? fixture.root, () =>
+      resolvePluginRuntimeModule({
+        modulePath: modulePath(fixture.root),
+        argv1: argv1?.(fixture.root),
+        cwd: cwd?.(fixture.root),
+        env,
+      }),
+    );
     expect(resolved).toBe(expected === "dist" ? fixture.distFile : fixture.srcFile);
   });
 });

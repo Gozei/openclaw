@@ -128,6 +128,16 @@ describe("local media roots", () => {
     expect(roots.map(normalizeHostPath)).not.toContain(normalizeHostPath("/"));
   });
 
+  it("adds configured generated output root to agent-scoped media roots", () => {
+    const outputRoot = path.join("/tmp", "openclaw-generated-output-root");
+    const roots = getAgentScopedMediaLocalRoots(
+      { tools: { media: { generatedOutputRoot: outputRoot } } },
+      "ops",
+    );
+
+    expect(roots).toContain(outputRoot);
+  });
+
   it("does not widen local roots for pass-through remote media schemes", () => {
     const roots = appendLocalMediaParentRoots(["/tmp/base"], ["mxc://matrix.org/abc123def456"]);
 
