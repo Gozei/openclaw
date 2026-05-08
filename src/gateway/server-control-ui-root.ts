@@ -14,6 +14,10 @@ export async function resolveGatewayControlUiRootState(params: {
   gatewayRuntime: RuntimeEnv;
   log: { warn: (message: string) => void };
 }): Promise<ControlUiRootState | undefined> {
+  if (!params.controlUiEnabled) {
+    return undefined;
+  }
+
   if (params.controlUiRootOverride) {
     const resolvedOverride = resolveControlUiRootOverrideSync(params.controlUiRootOverride);
     const resolvedOverridePath = path.resolve(params.controlUiRootOverride);
@@ -23,10 +27,6 @@ export async function resolveGatewayControlUiRootState(params: {
     return resolvedOverride
       ? { kind: "resolved", path: resolvedOverride }
       : { kind: "invalid", path: resolvedOverridePath };
-  }
-
-  if (!params.controlUiEnabled) {
-    return undefined;
   }
 
   const resolveRoot = () =>
